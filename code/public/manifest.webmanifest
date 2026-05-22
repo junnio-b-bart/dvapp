@@ -1,0 +1,16 @@
+{
+  "name": "DivideConta",
+  "short_name": "DivideConta",
+  "description": "Divida faturas de cartão revisando e selecionando os seus itens.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6F8FB",
+  "theme_color": "#071A33",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

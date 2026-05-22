@@ -1,0 +1,35 @@
+# Dependências
+node_modules/
+code/node_modules/
+
+# Variáveis de ambiente (NUNCA commitar)
+.env
+.env.local
+.env*.local
+code/.env
+code/.env.local
+
+# Build
+dist/
+code/dist/
+
+# Cache / logs
+.vite/
+code/.vite/
+*.log
+code/*.log
+vite.log
+api.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+
+# OCR traineddata (arquivos grandes)
+code/*.traineddata
+
+# Screenshots de QA
+code/qa-screenshots/

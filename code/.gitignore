@@ -1,0 +1,10 @@
+node_modules/
+dist/
+qa-screenshots/
+vite.log
+api.log
+data/
+.env
+.env.local
+.DS_Store
+Thumbs.db
