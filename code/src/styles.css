@@ -53,6 +53,31 @@
   font-size: 15px;
   margin: 0;
 }
+
+/* ── Seções retráteis (CollapsibleCard) ─────────────────────── */
+.collapsible-trigger {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.collapsible-trigger h1 { margin: 0; font-size: 22px; }
+.collapsible-sub { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
+.collapsible-chevron {
+  flex-shrink: 0;
+  margin-top: 4px;
+  color: var(--muted);
+  transition: transform 0.22s ease;
+}
+.collapsible-chevron.open { transform: rotate(180deg); }
+.collapsible-body { margin-top: 20px; }
+.settings-section-title { margin: 22px 0 12px; font-size: 15px; }
 .password-toggle {
   flex-shrink: 0;
   display: inline-flex;

@@ -715,7 +715,22 @@ function HistoryPage({ items, totals, onUpload }) {
   );
 }
 
-// FIX: SettingsPage - corrigido para não chamar setState durante render (useEffect) e botão Salvar funciona
+function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="settings-card">
+      <button className="collapsible-trigger" type="button" onClick={() => setOpen((o) => !o)}>
+        <div>
+          <h1>{title}</h1>
+          {subtitle && <p className="collapsible-sub">{subtitle}</p>}
+        </div>
+        <ChevronDown size={20} className={`collapsible-chevron${open ? ' open' : ''}`} />
+      </button>
+      {open && <div className="collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
 function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDelete }) {
   const [draft, setDraft] = useState(card);
   const [saved, setSaved] = useState(false);
@@ -734,7 +749,6 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDe
     setSaved(false);
   }
 
-  // FIX: Botão Salvar agora persiste as alterações ao clicar
   function handleSave() {
     onChangeCard(draft);
     setSaved(true);
@@ -742,11 +756,7 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDe
 
   return (
     <div className="settings-page">
-      <section className="settings-card">
-        <div className="settings-title">
-          <h1>Ajustes do cartão</h1>
-          <p>Edite as informações do seu cartão.</p>
-        </div>
+      <CollapsibleCard title="Ajustes do cartão" subtitle="Edite as informações do seu cartão.">
         <div className="form-grid">
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => updateDraft({ name })} />
           <Field label="Finais do cartão" value={draft.last4} onChange={(last4) => updateDraft({ last4 })} />
@@ -758,26 +768,25 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDe
         <BrandChips value={draft.brand} onChange={(brand) => updateDraft({ brand })} />
         <div className="settings-actions">
           <button className="danger-link" type="button" onClick={onDelete}><Trash2 size={18} />Excluir cartão</button>
-          {/* FIX: onClick que realmente persiste as alterações */}
           <button className="primary" type="button" onClick={handleSave}>
             {saved ? <><Check size={17} />Salvo!</> : 'Salvar alterações'}
           </button>
         </div>
-      </section>
-      <section className="settings-card app-settings">
-        <div>
-          <h1>Ajustes do app</h1>
-          <p>Personalize sua experiência no DivideConta.</p>
-          <Field label="Nome de referência" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
-          <h3>Cor geral / tema</h3>
-          <div className="theme-list">
-            <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
-            <button className="theme-chip" type="button"><span className="swatch green" />Verde</button>
-            <button className="theme-chip" type="button"><span className="swatch purple" />Roxo</button>
-          </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta.">
+        <Field label="Nome de referência" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
+        <h3 className="settings-section-title">Cor geral / tema</h3>
+        <div className="theme-list">
+          <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
+          <button className="theme-chip" type="button"><span className="swatch green" />Verde</button>
+          <button className="theme-chip" type="button"><span className="swatch purple" />Roxo</button>
         </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber.">
         <NotificationPanel values={notifications} onChange={onNotifications} />
-      </section>
+      </CollapsibleCard>
     </div>
   );
 }
@@ -931,7 +940,7 @@ function brandVisual(id, label) {
   return <strong className={`brand-word ${id}`}>{label}</strong>;
 }
 
-function NotificationPanel({ values, onChange }) {
+function NotificationPanel({ values, onChange, showHeader = false }) {
   const options = [
     ['closing', 'Fechamento da fatura', 'Receba um lembrete alguns dias antes do fechamento.'],
     ['due', 'Vencimento da fatura', 'Seja avisado quando a fatura estiver próxima do vencimento.'],
@@ -941,8 +950,8 @@ function NotificationPanel({ values, onChange }) {
   ];
   return (
     <div className="notification-panel">
-      <h2>Notificações</h2>
-      <p>Gerencie os alertas que você deseja receber.</p>
+      {showHeader && <h2>Notificações</h2>}
+      {showHeader && <p>Gerencie os alertas que você deseja receber.</p>}
       {options.map(([key, title, description]) => (
         <label className="notification-row" key={key}>
           <span className="notify-icon"><CalendarDays size={19} /></span>
@@ -1113,7 +1122,7 @@ function NotificationsModal({ values, onClose, onSave }) {
   return (
     <ModalShell title="Preferências de notificação" onClose={onClose}>
       <p className="muted">Escolha quais alertas deseja receber.</p>
-      <NotificationPanel values={draft} onChange={setDraft} />
+      <NotificationPanel values={draft} onChange={setDraft} showHeader />
       <button className="primary full" type="button" onClick={() => onSave(draft)}>Salvar preferências</button>
     </ModalShell>
   );
