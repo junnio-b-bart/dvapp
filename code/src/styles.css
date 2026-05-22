@@ -135,7 +135,10 @@
 }
 
 /* ── Histórico: redesign ─────────────────────────────────────── */
-.history-page { display: flex; flex-direction: column; gap: 22px; }
+.history-page {
+  display: flex; flex-direction: column; gap: 22px;
+  min-height: 100%;   /* preenche o workspace como page-stack */
+}
 
 .history-nav-card, .history-detail-card {
   border: 1px solid var(--line);
@@ -144,7 +147,12 @@
   box-shadow: var(--soft-shadow);
 }
 .history-nav-card   { padding: 22px 24px; }
-.history-detail-card { padding: 26px 28px; }
+.history-detail-card {
+  padding: 26px 28px;
+  flex: 1;                   /* cresce para preencher o espaço restante */
+  display: flex;
+  flex-direction: column;
+}
 
 /* Linha topo do card de nav: seletor de ano | legenda */
 .history-nav-top {
@@ -258,7 +266,9 @@
 
 /* Lista scrollável de itens */
 .history-items-scroll {
-  max-height: 360px; overflow-y: auto;
+  flex: 1;            /* cresce dentro do detail-card */
+  min-height: 80px;
+  overflow-y: auto;
   border: 1px solid var(--line); border-radius: 12px; background: #fff;
 }
 .history-items-header {
@@ -288,7 +298,8 @@
 
 /* Estado vazio */
 .history-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  flex: 1;            /* cresce junto com items-scroll quando não há itens */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   padding: 36px 20px; color: var(--muted); text-align: center;
 }
 .history-empty p { margin: 0; font-size: 15px; line-height: 1.5; }
@@ -321,10 +332,13 @@
 }
 
 @media(max-width:1120px) {
-  .history-page          { gap: 12px; }
+  .history-page {
+    gap: 12px;
+    min-height: calc(100vh - 220px);   /* preenche tela no mobile */
+  }
   .history-nav-card, .history-detail-card { border-radius: 12px; }
   .history-nav-card      { padding: 14px 12px; }
-  .history-detail-card   { padding: 18px 14px; }
+  .history-detail-card   { padding: 18px 14px; flex: 1; }
   .history-nav-top       { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
   .history-legend > span { font-size: 11px; gap: 4px; }
   .history-legend        { gap: 10px; }
@@ -335,7 +349,7 @@
   .history-metrics       { gap: 10px; }
   .history-metric        { padding: 12px; }
   .history-metric strong { font-size: 20px; }
-  .history-items-scroll  { max-height: none; }
+  .history-items-scroll  { min-height: 160px; }
   .history-items-header,
   .history-item-row { grid-template-columns: 54px 1fr 80px 80px 22px; padding: 0 10px; font-size: 12px; }
 }
