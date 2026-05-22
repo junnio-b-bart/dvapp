@@ -691,6 +691,7 @@ function HistoryPage({ items, totals, onUpload }) {
   const isPastEmpty = monthDiff < 0 && displayItems.length === 0;
 
   return (
+    <div className="page-stack">
     <div className="history-page">
       <div className="page-head">
         <h1>Histórico das faturas</h1>
@@ -837,6 +838,7 @@ function HistoryPage({ items, totals, onUpload }) {
           </button>
         </section>
       )}
+    </div>
     </div>
   );
 }

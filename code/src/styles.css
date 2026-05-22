@@ -135,9 +135,9 @@
 }
 
 /* ── Histórico: redesign ─────────────────────────────────────── */
+/* page-stack (wrapper externo) já garante width:100% e min-height:100% */
 .history-page {
   display: flex; flex-direction: column; gap: 22px;
-  min-height: 100%;   /* preenche o workspace como page-stack */
 }
 
 .history-nav-card, .history-detail-card {
@@ -332,10 +332,7 @@
 }
 
 @media(max-width:1120px) {
-  .history-page {
-    gap: 12px;
-    min-height: calc(100vh - 220px);   /* preenche tela no mobile */
-  }
+  .history-page { gap: 12px; }
   .history-nav-card, .history-detail-card { border-radius: 12px; }
   .history-nav-card      { padding: 14px 12px; }
   .history-detail-card   { padding: 18px 14px; flex: 1; }
