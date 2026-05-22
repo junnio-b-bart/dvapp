@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Bell,
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CircleAlert,
   CircleCheck,
@@ -463,6 +464,7 @@ function App({ session }) {
                   notifications={state.notifications}
                   onChangeCard={updateCard}
                   onNotifications={(notifications) => update({ notifications })}
+                  onSaveNotifications={(notifications) => db.upsertNotificationSettings(userId, notifications)}
                   onDelete={() => setModal('delete-card')}
                 />
               )}
@@ -635,75 +637,131 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
 }
 
 function HistoryPage({ items, totals, onUpload }) {
-  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const { monthIndex: currentMonthIndex, year: currentYear } = getReferenceDateParts();
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(currentMonthIndex);
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  const selectedMonthName = monthNames[selectedMonthIndex];
   const monthDiff = (selectedYear - currentYear) * 12 + (selectedMonthIndex - currentMonthIndex);
   const isCurrentMonth = monthDiff === 0;
 
   const displayItems = useMemo(() => {
-    if (monthDiff === 0) return items.slice(0, 6);
+    if (monthDiff === 0) return items;
     if (monthDiff > 0) return getForecastItems(items, monthDiff);
     return [];
   }, [items, monthDiff]);
 
   const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + i.amount, 0), [displayItems]);
 
-  function getMonthStatus(index) {
-    const diff = (selectedYear - currentYear) * 12 + (index - currentMonthIndex);
-    if (diff < 0) return 'Fechada';
-    if (diff === 0) return 'Previsão';
-    return getForecastItems(items, diff).length > 0 ? 'Previsão' : 'Sem fatura';
+  function getMonthStatus(index, year) {
+    const diff = (year - currentYear) * 12 + (index - currentMonthIndex);
+    if (diff < 0) return 'closed';
+    if (diff === 0) return 'current';
+    return getForecastItems(items, diff).length > 0 ? 'forecast' : 'empty';
   }
 
+  function navigate(direction) {
+    let newIndex = selectedMonthIndex + direction;
+    let newYear = selectedYear;
+    if (newIndex < 0) { newIndex = 11; newYear--; }
+    if (newIndex > 11) { newIndex = 0; newYear++; }
+    setSelectedMonthIndex(newIndex);
+    setSelectedYear(newYear);
+  }
+
+  const status = getMonthStatus(selectedMonthIndex, selectedYear);
+  const statusLabel = { closed: 'Fechada', current: 'Atual', forecast: 'Previsão', empty: 'Sem dados' }[status];
   const nextMonthIndex = (selectedMonthIndex + 1) % 12;
   const nextMonthYear = selectedMonthIndex === 11 ? selectedYear + 1 : selectedYear;
-  const nextMonthName = monthNames[nextMonthIndex];
-  const nextMonthDiff = monthDiff + 1;
-  const nextMonthForecast = getForecastItems(items, nextMonthDiff);
+  const nextMonthForecast = getForecastItems(items, monthDiff + 1);
 
   return (
     <div className="history-page">
       <div className="page-head">
-        <h1>Histórico do cartão</h1>
+        <h1>Histórico</h1>
         <div className="head-actions">
-          <button className="ghost year" type="button">{selectedYear} <ChevronDown size={18} /></button>
           <button className="ghost" type="button" onClick={onUpload}><CloudUpload size={18} />Subir fatura antiga</button>
         </div>
       </div>
-      <section className="months-card">
-        <h2>Meses de {selectedYear}</h2>
-        {monthNames.map((month, index) => {
-          const status = getMonthStatus(index);
-          return (
-            <MonthRow
-              key={month}
-              month={month}
-              active={month === selectedMonthName}
-              status={status}
-              onClick={() => setSelectedMonthIndex(index)}
-            />
-          );
-        })}
-      </section>
-      <section className="history-detail">
-        <span className="status-pill">{getMonthStatus(selectedMonthIndex)}</span>
-        <h2>Minha fatura — {selectedMonthName}/{selectedYear}</h2>
-        <div className="history-total">
-          <span className="round-icon"><FileText size={29} /></span>
-          <span>Total dos meus itens<strong>{monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}</strong></span>
+
+      {/* Navegador de mês */}
+      <div className="history-nav-card">
+        <div className="year-nav">
+          <button className="year-nav-btn" type="button" onClick={() => setSelectedYear((y) => y - 1)}><ChevronLeft size={18} /></button>
+          <span className="year-label">{selectedYear}</span>
+          <button className="year-nav-btn" type="button" onClick={() => setSelectedYear((y) => y + 1)}><ChevronRight size={18} /></button>
         </div>
-        <h3>{monthDiff > 0 ? 'Parcelas previstas' : 'Itens salvos na fatura'}</h3>
-        <CleanTable mode="wallet" items={displayItems} compact />
-      </section>
+        <div className="month-strip">
+          {monthNamesShort.map((name, index) => {
+            const s = getMonthStatus(index, selectedYear);
+            return (
+              <button
+                key={name}
+                className={`month-chip${index === selectedMonthIndex ? ' active' : ''} chip-${s}`}
+                type="button"
+                onClick={() => setSelectedMonthIndex(index)}
+              >
+                <span className="chip-dot" />
+                <span>{name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Detalhe do mês selecionado */}
+      <div className="history-detail-card">
+        <div className="history-detail-head">
+          <div>
+            <span className={`status-pill pill-${status}`}>{statusLabel}</span>
+            <h2>{monthNamesFull[selectedMonthIndex]} / {selectedYear}</h2>
+          </div>
+          <div className="history-nav-arrows">
+            <button className="ghost" type="button" onClick={() => navigate(-1)}><ChevronLeft size={18} /></button>
+            <button className="ghost" type="button" onClick={() => navigate(1)}><ChevronRight size={18} /></button>
+          </div>
+        </div>
+
+        <div className="history-metrics">
+          <div className="history-metric">
+            <span className="round-icon small"><FileText size={22} /></span>
+            <div>
+              <small>Minha parte</small>
+              <strong>{monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}</strong>
+            </div>
+          </div>
+          <div className="history-metric">
+            <span className="round-icon small"><List size={22} /></span>
+            <div>
+              <small>Lançamentos</small>
+              <strong>{monthDiff < 0 ? '—' : displayItems.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <h3 className="history-items-title">
+          {monthDiff > 0 ? 'Parcelas previstas' : monthDiff < 0 ? 'Fatura encerrada' : 'Meus itens'}
+        </h3>
+
+        {displayItems.length > 0
+          ? <CleanTable mode="wallet" items={displayItems} compact />
+          : (
+            <div className="history-empty">
+              {monthDiff < 0
+                ? <><FileText size={28} /><p>Fatura encerrada. <button className="link-btn" type="button" onClick={onUpload}>Subir extrato</button> para ver os detalhes.</p></>
+                : <><CircleAlert size={28} /><p>Nenhum item para este mês ainda.</p></>
+              }
+            </div>
+          )
+        }
+      </div>
+
       {nextMonthForecast.length > 0 && (
         <section className="forecast-box">
           <Clock3 size={32} />
           <span>
-            <strong>{nextMonthName}/{nextMonthYear} — {nextMonthForecast.length} parcela{nextMonthForecast.length > 1 ? 's' : ''} prevista{nextMonthForecast.length > 1 ? 's' : ''}</strong>
+            <strong>{monthNamesFull[nextMonthIndex]}/{nextMonthYear} — {nextMonthForecast.length} parcela{nextMonthForecast.length > 1 ? 's' : ''} prevista{nextMonthForecast.length > 1 ? 's' : ''}</strong>
             <small>Parcelas remanescentes detectadas para o próximo mês.</small>
           </span>
           <button className="ghost" type="button" onClick={() => { setSelectedMonthIndex(nextMonthIndex); setSelectedYear(nextMonthYear); }}>
@@ -731,31 +789,56 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
-function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDelete }) {
+function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSaveNotifications, onDelete }) {
   const [draft, setDraft] = useState(card);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const savedCardRef = useRef(card);
 
+  // Troca de cartão → reseta draft
   useEffect(() => {
     if (!card) return;
     setDraft(card);
-    setSaved(false);
+    savedCardRef.current = card;
+    setSaveStatus('idle');
   }, [card?.id]);
+
+  // Autosave com debounce de 800ms
+  useEffect(() => {
+    if (!draft) return;
+    if (JSON.stringify(draft) === JSON.stringify(savedCardRef.current)) return;
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      savedCardRef.current = { ...draft };
+      await onChangeCard(draft);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [draft]);
 
   if (!card) return null;
 
   function updateDraft(patch) {
-    const next = { ...draft, ...patch };
-    setDraft(next);
-    setSaved(false);
+    setDraft((prev) => ({ ...prev, ...patch }));
   }
 
-  function handleSave() {
-    onChangeCard(draft);
-    setSaved(true);
+  async function handleNotifChange(next) {
+    onNotifications(next);
+    setSaveStatus('saving');
+    if (onSaveNotifications) {
+      await onSaveNotifications(next);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    }
   }
 
   return (
     <div className="settings-page">
+      <div className="autosave-status">
+        {saveStatus === 'saving' && <span className="autosave-indicator saving"><span className="spinner-dot" />Salvando…</span>}
+        {saveStatus === 'saved'  && <span className="autosave-indicator saved"><Check size={14} />Salvo</span>}
+      </div>
+
       <CollapsibleCard title="Ajustes do cartão" subtitle="Edite as informações do seu cartão.">
         <div className="form-grid">
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => updateDraft({ name })} />
@@ -768,9 +851,6 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDe
         <BrandChips value={draft.brand} onChange={(brand) => updateDraft({ brand })} />
         <div className="settings-actions">
           <button className="danger-link" type="button" onClick={onDelete}><Trash2 size={18} />Excluir cartão</button>
-          <button className="primary" type="button" onClick={handleSave}>
-            {saved ? <><Check size={17} />Salvo!</> : 'Salvar alterações'}
-          </button>
         </div>
       </CollapsibleCard>
 
@@ -785,7 +865,7 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onDe
       </CollapsibleCard>
 
       <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber.">
-        <NotificationPanel values={notifications} onChange={onNotifications} />
+        <NotificationPanel values={notifications} onChange={handleNotifChange} />
       </CollapsibleCard>
     </div>
   );
@@ -858,22 +938,6 @@ function SummaryBar({ count, label, totalLabel, total, action, onAction, seconda
   );
 }
 
-// FIX: Recebe onClick e usa ícone correto para "Sem fatura"
-function MonthRow({ month, status, active, onClick }) {
-  const tone = status === 'Fechada' ? 'closed' : status === 'Previsão' ? 'forecast' : 'empty';
-  return (
-    <button className={`month-row ${active ? 'active' : ''}`} type="button" onClick={onClick}>
-      {/* FIX: Ícone correto por status */}
-      {status === 'Fechada'
-        ? <CircleCheck size={17} />
-        : status === 'Previsão'
-          ? <Clock3 size={17} />
-          : <X size={17} />}
-      <span>{month}</span>
-      <b className={tone}>{status}</b>
-    </button>
-  );
-}
 
 function Field({ label, value, onChange, icon: Icon, type = 'text' }) {
   const [showPassword, setShowPassword] = useState(false);
