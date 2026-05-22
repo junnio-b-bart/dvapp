@@ -181,6 +181,7 @@ function App({ session }) {
     itemsByCard: {},
     invoiceIdByCard: {},
     notifications: { closing: true, due: true, forecast: true, upload: true, overdue: true },
+    profileName: '',   // nome do usuário no app (profiles.name)
   });
   const [modal, setModal] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -210,7 +211,10 @@ function App({ session }) {
 
       const { data: inv } = await db.getOrCreateInvoice(firstId, userId, month, year);
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
-      const { data: notifs } = await db.getNotificationSettings(userId);
+      const [{ data: notifs }, { data: profile }] = await Promise.all([
+        db.getNotificationSettings(userId),
+        db.getProfile(userId),
+      ]);
 
       setState((prev) => ({
         ...prev,
@@ -218,6 +222,7 @@ function App({ session }) {
         selectedCardId: firstId,
         itemsByCard: { [firstId]: items || [] },
         invoiceIdByCard: inv ? { [firstId]: inv.id } : {},
+        profileName: profile?.name || '',
         notifications: notifs
           ? { closing: notifs.closing, due: notifs.due, forecast: notifs.forecast, upload: notifs.upload, overdue: notifs.overdue }
           : prev.notifications,
@@ -402,7 +407,8 @@ function App({ session }) {
 
   if (appLoading) return <LoadingScreen />;
 
-  const ownerInitials = getInitials(selectedCard?.owner);
+  // Avatar usa o nome do perfil; fallback para o titular do cartão selecionado
+  const ownerInitials = getInitials(state.profileName) || getInitials(selectedCard?.owner);
 
   return (
     <div className="app-shell">
@@ -462,8 +468,13 @@ function App({ session }) {
               {state.activeTab === 'ajustes' && (
                 <SettingsPage
                   card={selectedCard}
+                  profileName={state.profileName}
                   notifications={state.notifications}
                   onChangeCard={updateCard}
+                  onSaveProfile={async (name) => {
+                    update({ profileName: name });
+                    await db.updateProfile(userId, { name });
+                  }}
                   onNotifications={(notifications) => update({ notifications })}
                   onSaveNotifications={(notifications) => db.upsertNotificationSettings(userId, notifications)}
                   onDelete={() => setModal('delete-card')}
@@ -846,12 +857,14 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
-function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSaveNotifications, onDelete }) {
+function SettingsPage({ card, profileName, notifications, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
   const [draft, setDraft] = useState(card);
+  const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
-  const savedCardRef = useRef(card);
+  const savedCardRef    = useRef(card);
+  const savedProfileRef = useRef(profileName || '');
 
-  // Troca de cartão → reseta draft
+  // Troca de cartão → reseta draft do cartão
   useEffect(() => {
     if (!card) return;
     setDraft(card);
@@ -859,7 +872,13 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSa
     setSaveStatus('idle');
   }, [card?.id]);
 
-  // Autosave com debounce de 800ms
+  // Sincroniza profileDraft quando o prop muda (ex.: carregamento inicial)
+  useEffect(() => {
+    setProfileDraft(profileName || '');
+    savedProfileRef.current = profileName || '';
+  }, [profileName]);
+
+  // Autosave do CARTÃO com debounce 800ms
   useEffect(() => {
     if (!draft) return;
     if (JSON.stringify(draft) === JSON.stringify(savedCardRef.current)) return;
@@ -872,6 +891,19 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSa
     }, 800);
     return () => clearTimeout(timer);
   }, [draft]);
+
+  // Autosave do PERFIL com debounce 800ms
+  useEffect(() => {
+    if (profileDraft === savedProfileRef.current) return;
+    setSaveStatus('saving');
+    const timer = setTimeout(async () => {
+      savedProfileRef.current = profileDraft;
+      if (onSaveProfile) await onSaveProfile(profileDraft);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [profileDraft]);
 
   if (!card) return null;
 
@@ -896,11 +928,12 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSa
         {saveStatus === 'saved'  && <span className="autosave-indicator saved"><Check size={14} />Salvo</span>}
       </div>
 
+      {/* ── Ajustes do cartão ── */}
       <CollapsibleCard title="Ajustes do cartão" subtitle="Edite as informações do seu cartão.">
         <div className="form-grid">
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => updateDraft({ name })} />
           <Field label="Finais do cartão" value={draft.last4} onChange={(last4) => updateDraft({ last4 })} />
-          <Field label="Dono / referência" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
+          <Field label="Titular do cartão" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
           <Field label="Data de fechamento" icon={CalendarDays} value={draft.closeDate} onChange={(closeDate) => updateDraft({ closeDate })} />
           <Field label="Data de vencimento no" icon={CalendarDays} value={draft.dueDate} onChange={(dueDate) => updateDraft({ dueDate })} />
         </div>
@@ -911,8 +944,13 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSa
         </div>
       </CollapsibleCard>
 
+      {/* ── Ajustes do app ── */}
       <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta.">
-        <Field label="Nome de referência" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
+        <Field
+          label="Seu nome no app"
+          value={profileDraft}
+          onChange={setProfileDraft}
+        />
         <h3 className="settings-section-title">Cor geral / tema</h3>
         <div className="theme-list">
           <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
@@ -921,6 +959,7 @@ function SettingsPage({ card, notifications, onChangeCard, onNotifications, onSa
         </div>
       </CollapsibleCard>
 
+      {/* ── Notificações ── */}
       <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber.">
         <NotificationPanel values={notifications} onChange={handleNotifChange} />
       </CollapsibleCard>
