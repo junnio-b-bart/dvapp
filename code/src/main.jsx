@@ -700,21 +700,22 @@ function HistoryPage({ items, totals, onUpload }) {
 
   return (
     <div className="page-stack history-stack">
-      <div className="history-page">
 
-        {/* ── Métricas — mesmo padrão de Carteira/Faturas ── */}
-        <section className="metric-grid wallet-grid">
-          <Metric
-            icon={FileText}
-            title="Minha parte"
-            value={monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}
-          />
-          <Metric
-            icon={List}
-            title="Lançamentos"
-            value={monthDiff < 0 ? '—' : String(displayItems.length)}
-          />
-        </section>
+      {/* ── Métricas fora do flex container — mesmo contexto que Carteira ── */}
+      <section className="metric-grid wallet-grid">
+        <Metric
+          icon={FileText}
+          title="Minha parte"
+          value={monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}
+        />
+        <Metric
+          icon={List}
+          title="Lançamentos"
+          value={monthDiff < 0 ? '—' : String(displayItems.length)}
+        />
+      </section>
+
+      <div className="history-page">
 
         {/* ── Card de navegação: seletor de ano + legenda + strip de meses ── */}
         <div className="history-nav-card">

@@ -162,8 +162,9 @@
    Usa dois seletores (maior especificidade) para vencer o @media desktop. */
 .page-stack.history-stack { padding-bottom: 32px; }
 
-/* Wrapper interno: coluna com o mesmo gap das outras abas */
-.history-page { display: flex; flex-direction: column; gap: 22px; }
+/* Wrapper interno: coluna com o mesmo gap das outras abas.
+   margin-top repõe o gap que o metric-grid (agora fora deste flex) tinha. */
+.history-page { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
 
 /* ── Cards de navegação e detalhe (mesmos tokens do settings-card) ── */
 .history-nav-card,
@@ -323,7 +324,7 @@
 
 /* ── Histórico responsivo ──────────────────────────────────────── */
 @media(max-width:1120px) {
-  .history-page         { gap: 12px; }
+  .history-page         { gap: 12px; margin-top: 12px; }
   .history-nav-card,
   .history-detail-card  { border-radius: 12px; }
   .history-nav-card     { padding: 14px 12px; }
