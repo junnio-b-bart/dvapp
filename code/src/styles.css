@@ -183,8 +183,10 @@
 .page-stack.history-stack { padding-bottom: 32px; }
 
 /* Wrapper interno: coluna com o mesmo gap das outras abas.
-   margin-top repõe o gap que o metric-grid (agora fora deste flex) tinha. */
-.history-page { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
+   margin-top repõe o gap que o metric-grid (agora fora deste flex) tinha.
+   align-items:stretch sobrescreve o align-items:start do grid legado no CSS
+   minificado — sem isso os cards ficam com a largura mínima do conteúdo. */
+.history-page { display: flex; flex-direction: column; align-items: stretch; gap: 22px; margin-top: 22px; }
 
 /* ── Cards de navegação e detalhe (mesmos tokens do settings-card) ── */
 .history-nav-card,
@@ -468,6 +470,6 @@
   /* Faturas: tabela se adapta à altura disponível da tela */
   .invoices-stack .table-card { max-height: max(280px, calc(100vh - 510px)); }
 
-  /* Histórico: CleanTable com mesma max-height que a antiga history-items-scroll */
-  .history-detail-card .table-card { max-height: 340px; }
+  /* Histórico: tabela de itens adaptativa à altura da tela (mesma lógica que Faturas) */
+  .history-detail-card .table-card { max-height: max(280px, calc(100vh - 520px)); }
 }
