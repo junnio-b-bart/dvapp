@@ -1217,14 +1217,38 @@ function CardModal({ onClose, onSave }) {
   );
 }
 
+// Calcula a parcela atual com base na diferença de meses entre a data da compra e hoje
+function computeCurrentInstallment(dateStr, total) {
+  if (!dateStr || !total) return 1;
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return 1;
+  const purchase = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+  const today = new Date();
+  const elapsed = (today.getFullYear() - purchase.getFullYear()) * 12
+    + (today.getMonth() - purchase.getMonth());
+  return Math.min(Math.max(1, elapsed + 1), total);
+}
+
 // FIX: ItemModal usa data de hoje e descrição vazia para novos itens
 function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
   const [parcelado, setParcelado] = useState(row?.installment && row.installment !== '-');
   const [draft, setDraft] = useState(row || item(`m-${Date.now()}`, getTodayFormatted(), '', '-', 0, true, true));
+
   // Estado de texto separado para o campo Valor — evita NaN ao reeditar valor formatado
   const [amountText, setAmountText] = useState(() =>
     row?.amount && Number(row.amount) !== 0 ? amountOnly(row.amount) : ''
   );
+
+  // Total de parcelas (selecionado via pills; parseia do row existente se estiver editando)
+  const [totalInstallments, setTotalInstallments] = useState(() => {
+    if (!row?.installment || row.installment === '-') return 1;
+    return parseInt(row.installment.split('/')[1]) || 1;
+  });
+  // Se o total for > 12, abre campo manual automaticamente
+  const [showCustom, setShowCustom] = useState(() => {
+    if (!row?.installment || row.installment === '-') return false;
+    return (parseInt(row.installment.split('/')[1]) || 0) > 12;
+  });
 
   function handleAmountChange(raw) {
     setAmountText(raw);
@@ -1240,27 +1264,79 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
     setDraft((prev) => ({ ...prev, amount: isNaN(n) ? 0 : n }));
   }
 
+  const currentInstallment = computeCurrentInstallment(draft.date, totalInstallments);
+
   return (
     <ModalShell title={title} onClose={onClose}>
-      <form className="modal-form" onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, installment: parcelado ? draft.installment : '-' }); }}>
+      <form
+        className="modal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const installment = parcelado ? `${currentInstallment}/${totalInstallments}` : '-';
+          onSave({ ...draft, installment });
+        }}
+      >
         <div className="form-grid two">
           <Field label="Descrição da compra" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} />
           <Field label="Valor da compra" value={amountText} onChange={handleAmountChange} />
           <label className="field span-two"><span>Cartão</span><i><BankBadge bank={card.bank} /><input value={`${card.name}  •••• ${card.last4}`} readOnly /></i></label>
           <Field label="Data da compra" icon={CalendarDays} value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
         </div>
+
         <div className="installment-mode">
           <button className={!parcelado ? 'active' : ''} type="button" onClick={() => setParcelado(false)}><CreditCard size={18} />À vista</button>
           <button className={parcelado ? 'active' : ''} type="button" onClick={() => setParcelado(true)}><Clock3 size={18} />Parcelado</button>
         </div>
+
         {parcelado && (
-          <div className="form-grid two">
-            <Field label="Parcela atual" value={draft.installment.split('/')[0] || '1'} onChange={(current) => setDraft({ ...draft, installment: `${current}/${draft.installment.split('/')[1] || 12}` })} />
-            <Field label="Total de parcelas" value={draft.installment.split('/')[1] || '12'} onChange={(total) => setDraft({ ...draft, installment: `${draft.installment.split('/')[0] || 1}/${total}` })} />
+          <div className="installment-pills-wrap">
+            <span className="installment-pills-label">Número de parcelas</span>
+            <div className="installment-pills">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`pill-num${totalInstallments === n && !showCustom ? ' active' : ''}`}
+                  onClick={() => { setTotalInstallments(n); setShowCustom(false); }}
+                >
+                  {n}
+                </button>
+              ))}
+              {/* Pill "+" para mais de 12 parcelas */}
+              <button
+                type="button"
+                className={`pill-num pill-plus${showCustom ? ' active' : ''}`}
+                onClick={() => setShowCustom(true)}
+              >
+                +
+              </button>
+            </div>
+
+            {showCustom && (
+              <Field
+                label="Total de parcelas"
+                value={String(totalInstallments)}
+                onChange={(v) => {
+                  const n = parseInt(v.replace(/\D/g, ''));
+                  if (!isNaN(n) && n > 0) setTotalInstallments(n);
+                }}
+              />
+            )}
+
+            {/* Prévia da parcela calculada automaticamente */}
+            <div className="info-strip">
+              <Info size={17} />
+              Parcela atual calculada automaticamente: <strong>{currentInstallment} de {totalInstallments}</strong>
+            </div>
           </div>
         )}
-        {row && <label className="mine-switch"><input type="checkbox" checked={draft.mine} onChange={(event) => setDraft({ ...draft, mine: event.target.checked })} />Este item é meu</label>}
-        {row && <div className="info-strip"><Info size={17} />Item parcelado? Ex.: 2/10 significa que este é o 2º item de 10 parcelas.</div>}
+
+        {row && (
+          <label className="mine-switch">
+            <input type="checkbox" checked={draft.mine} onChange={(event) => setDraft({ ...draft, mine: event.target.checked })} />
+            Este item é meu
+          </label>
+        )}
         <div className="modal-actions">
           {onDelete && <button className="danger-link" type="button" onClick={() => onDelete(row.id)}><Trash2 size={18} />Excluir item</button>}
           <button className="ghost" type="button" onClick={onClose}>Cancelar</button>

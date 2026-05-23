@@ -163,6 +163,26 @@
 /* O minificado usa display:grid mas sem place-items → itens ficam à esquerda */
 .bottom-nav .nav-button { place-items: center; align-content: center; }
 
+/* ── Pills de número de parcelas (ItemModal — Parcelado) ─────── */
+.installment-pills-wrap { display: flex; flex-direction: column; gap: 12px; }
+.installment-pills-label { color: #263853; font-size: 13px; font-weight: 800; }
+.installment-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill-num {
+  width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 11px;
+  background: #fff; color: var(--navy);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: border-color .12s, background .12s, box-shadow .12s;
+}
+.pill-num:hover { background: var(--page); }
+.pill-num.active {
+  border-color: var(--teal); background: #e8fbfc;
+  color: var(--teal-dark); box-shadow: 0 0 0 1px var(--teal);
+}
+/* pill "+" — quando ativo (>12 parcelas) fica com fundo navy */
+.pill-plus.active { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: none; }
+
 /* ── Invoice table — alinhamento central (Parcela, Valor e Ações) ── */
 .table-header.invoice span:nth-child(4),
 .table-header.invoice span:nth-child(5),
