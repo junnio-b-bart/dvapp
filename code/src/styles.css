@@ -142,6 +142,11 @@
 .summary-copy { display: flex; align-items: center; gap: 10px; }
 .summary-copy-icon { display: block; color: var(--teal-dark); flex-shrink: 0; }
 
+/* "1 de 26  itens selecionados" — tudo na mesma linha, label menor ao lado */
+.summary-copy > span { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+/* override display:block do minificado — small fica inline ao lado do strong */
+.summary-copy small { display: inline; white-space: nowrap; }
+
 /* "de N" dentro do strong — menor e muted */
 .count-suffix { font-style: normal; font-size: 0.68em; font-weight: 600; color: var(--muted); }
 
@@ -154,24 +159,33 @@
 /* Action-row sem o botão de Subir fatura (foi pro bottom bar) */
 .action-row.no-upload { grid-template-columns: 286px 118px minmax(180px,1fr); }
 
-/* ── Invoice table — alinhamento central em Parcela e Valor ─── */
+/* ── Bottom-nav mobile: ícone + label centralizados ─────────── */
+/* O minificado usa display:grid mas sem place-items → itens ficam à esquerda */
+.bottom-nav .nav-button { place-items: center; align-content: center; }
+
+/* ── Invoice table — alinhamento central (Parcela, Valor e Ações) ── */
 .table-header.invoice span:nth-child(4),
-.table-header.invoice span:nth-child(5) { text-align: center; }
+.table-header.invoice span:nth-child(5),
+.table-header.invoice span:nth-child(6) { text-align: center; }
 .table-line.invoice span:nth-child(4)   { text-align: center; }
 /* override base `text-align:right` do minificado para invoice */
 .table-line.invoice b { text-align: center; }
+/* centraliza o ícone de lápis na coluna Ações (override justify-self:end) */
+.table-line.invoice .edit-button { justify-self: center; }
 
-/* ── Mobile: exibir ícone de lápis após Valor ──────────────── */
+/* ── Mobile: ícone de lápis + cabeçalho "Ações" na col 6 ─────── */
 @media(max-width:1120px) {
-  /* adiciona coluna de 36px para o botão de edição */
+  /* colunas um pouco mais largas nas cols fixas → descrição fica ligeiramente menor */
   .table-header.invoice,
-  .table-line.invoice { grid-template-columns: 28px 54px minmax(0,1fr) 48px 72px 36px; }
+  .table-line.invoice { grid-template-columns: 28px 58px minmax(0,1fr) 52px 76px 36px; }
   /* mostra o botão de edição (antes estava display:none no mobile) */
   .table-line.invoice .edit-button { display: inline-flex; }
+  /* mostra o cabeçalho "Ações" (antes display:none no mobile) */
+  .table-header.invoice span:last-child { display: block; text-align: center; }
 }
 @media(max-width:520px) {
   .table-header.invoice,
-  .table-line.invoice { grid-template-columns: 26px 44px minmax(0,1fr) 38px 62px 32px; }
+  .table-line.invoice { grid-template-columns: 26px 48px minmax(0,1fr) 42px 66px 32px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
