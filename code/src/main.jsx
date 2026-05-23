@@ -691,154 +691,146 @@ function HistoryPage({ items, totals, onUpload }) {
   const isPastEmpty = monthDiff < 0 && displayItems.length === 0;
 
   return (
-    <div className="page-stack">
-    <div className="history-page">
-      <div className="page-head">
-        <h1>Histórico das faturas</h1>
-      </div>
+    <div className="page-stack history-stack">
+      <div className="history-page">
 
-      {/* Card de navegação: seletor de ano + legenda + strip de meses */}
-      <div className="history-nav-card">
-        <div className="history-nav-top">
-          {/* Seletor de ano */}
-          <div
-            className="year-selector-wrap"
-            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setYearOpen(false); }}
-          >
-            <button
-              className="year-selector-btn"
-              type="button"
-              onClick={() => setYearOpen((o) => !o)}
-            >
-              <CalendarDays size={16} />
-              {selectedYear}
-              <ChevronDown size={14} className={`year-chevron${yearOpen ? ' open' : ''}`} />
-            </button>
-            {yearOpen && (
-              <div className="year-dropdown">
-                {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
-                  <button
-                    key={y}
-                    className={y === selectedYear ? 'active' : ''}
-                    type="button"
-                    onClick={() => { setSelectedYear(y); setYearOpen(false); }}
-                  >
-                    {y}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* Legenda */}
-          <div className="history-legend">
-            <span><span className="legend-dot closed" />Fechada</span>
-            <span><span className="legend-dot forecast" />Previsão</span>
-            <span><span className="legend-dot empty" />Sem fatura</span>
-          </div>
-        </div>
-
-        {/* Strip de meses com setas */}
-        <div className="month-strip-row">
-          <button className="strip-arrow" type="button" onClick={() => navigate(-1)}><ChevronLeft size={17} /></button>
-          <div className="month-strip">
-            {monthNamesShort.map((name, index) => {
-              const s = getMonthStatus(index, selectedYear);
-              return (
-                <button
-                  key={name}
-                  className={`month-chip${index === selectedMonthIndex ? ' active' : ''} chip-${s}`}
-                  type="button"
-                  onClick={() => setSelectedMonthIndex(index)}
-                >
-                  <span className="chip-dot" />
-                  <span>{name}</span>
-                </button>
-              );
-            })}
-          </div>
-          <button className="strip-arrow" type="button" onClick={() => navigate(1)}><ChevronRight size={17} /></button>
-        </div>
-      </div>
-
-      {/* Card de detalhe */}
-      <div className="history-detail-card">
-        <div className="history-detail-head">
-          <div className="history-detail-title">
-            <h2>{monthNamesFull[selectedMonthIndex]} / {selectedYear}</h2>
-            <span className={`status-pill pill-${status}`}>{statusLabel}</span>
-          </div>
-          <button className="ghost small" type="button">
-            <Download size={16} />Exportar PDF
-          </button>
-        </div>
-
-        <div className="history-metrics">
-          <div className="history-metric">
-            <span className="round-icon small"><FileText size={22} /></span>
-            <div>
-              <small>Minha parte</small>
-              <strong>{monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}</strong>
-            </div>
-          </div>
-          <div className="history-metric">
-            <span className="round-icon small"><List size={22} /></span>
-            <div>
-              <small>Lançamentos</small>
-              <strong>{monthDiff < 0 ? '—' : displayItems.length}</strong>
-            </div>
-          </div>
-        </div>
-
-        <h3 className="history-items-title">Itens da minha fatura</h3>
-
-        {isPastEmpty ? (
-          <div className="history-empty">
-            <FileText size={28} />
-            <p>Nenhuma fatura para este mês.</p>
-            <button className="ghost" type="button" onClick={onUpload}>
-              <CloudUpload size={17} />Subir fatura
-            </button>
-          </div>
-        ) : displayItems.length > 0 ? (
-          <div className="history-items-scroll">
-            <div className="history-items-header">
-              <span>Data</span>
-              <span>Descrição</span>
-              <span>Parcela</span>
-              <span>Valor</span>
-              <span />
-            </div>
-            {displayItems.map((row) => (
-              <div className="history-item-row" key={row.id}>
-                <span>{String(row.date || '').slice(0, 5)}</span>
-                <strong>{row.description}</strong>
-                <span>{row.installment && row.installment !== '-' ? row.installment.replace('/', ' de ') : '—'}</span>
-                <b>{amountOnly(row.amount)}</b>
-                <ChevronRight size={15} className="row-arrow" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="history-empty">
-            <CircleAlert size={28} />
-            <p>Nenhum item para este mês ainda.</p>
-          </div>
-        )}
-      </div>
-
-      {nextMonthForecast.length > 0 && (
-        <section className="forecast-box">
-          <Clock3 size={32} />
-          <span>
-            <strong>{monthNamesFull[nextMonthIndex]}/{nextMonthYear} — {nextMonthForecast.length} parcela{nextMonthForecast.length > 1 ? 's' : ''} prevista{nextMonthForecast.length > 1 ? 's' : ''}</strong>
-            <small>Parcelas remanescentes detectadas para o próximo mês.</small>
-          </span>
-          <button className="ghost" type="button" onClick={() => { setSelectedMonthIndex(nextMonthIndex); setSelectedYear(nextMonthYear); }}>
-            Ver previsão <ChevronRight size={18} />
-          </button>
+        {/* ── Métricas — mesmo padrão de Carteira/Faturas ── */}
+        <section className="metric-grid wallet-grid">
+          <Metric
+            icon={FileText}
+            title="Minha parte"
+            value={monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}
+          />
+          <Metric
+            icon={List}
+            title="Lançamentos"
+            value={monthDiff < 0 ? '—' : String(displayItems.length)}
+          />
         </section>
-      )}
-    </div>
+
+        {/* ── Card de navegação: seletor de ano + legenda + strip de meses ── */}
+        <div className="history-nav-card">
+          <div className="history-nav-top">
+            <div
+              className="year-selector-wrap"
+              onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setYearOpen(false); }}
+            >
+              <button
+                className="year-selector-btn"
+                type="button"
+                onClick={() => setYearOpen((o) => !o)}
+              >
+                <CalendarDays size={16} />
+                {selectedYear}
+                <ChevronDown size={14} className={`year-chevron${yearOpen ? ' open' : ''}`} />
+              </button>
+              {yearOpen && (
+                <div className="year-dropdown">
+                  {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                    <button
+                      key={y}
+                      className={y === selectedYear ? 'active' : ''}
+                      type="button"
+                      onClick={() => { setSelectedYear(y); setYearOpen(false); }}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="history-legend">
+              <span><span className="legend-dot closed" />Fechada</span>
+              <span><span className="legend-dot forecast" />Previsão</span>
+              <span><span className="legend-dot empty" />Sem fatura</span>
+            </div>
+          </div>
+
+          <div className="month-strip-row">
+            <button className="strip-arrow" type="button" onClick={() => navigate(-1)}><ChevronLeft size={17} /></button>
+            <div className="month-strip">
+              {monthNamesShort.map((name, index) => {
+                const s = getMonthStatus(index, selectedYear);
+                return (
+                  <button
+                    key={name}
+                    className={`month-chip${index === selectedMonthIndex ? ' active' : ''} chip-${s}`}
+                    type="button"
+                    onClick={() => setSelectedMonthIndex(index)}
+                  >
+                    <span className="chip-dot" />
+                    <span>{name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button className="strip-arrow" type="button" onClick={() => navigate(1)}><ChevronRight size={17} /></button>
+          </div>
+        </div>
+
+        {/* ── Card de detalhe: cabeçalho + lista de itens ── */}
+        <div className="history-detail-card">
+          <div className="history-detail-head">
+            <div className="history-detail-title">
+              <h2>{monthNamesFull[selectedMonthIndex]} / {selectedYear}</h2>
+              <span className={`status-pill pill-${status}`}>{statusLabel}</span>
+            </div>
+            <button className="ghost small" type="button">
+              <Download size={16} />Exportar PDF
+            </button>
+          </div>
+
+          <h3 className="history-items-title">Itens da minha fatura</h3>
+
+          {isPastEmpty ? (
+            <div className="history-empty">
+              <FileText size={28} />
+              <p>Nenhuma fatura para este mês.</p>
+              <button className="ghost" type="button" onClick={onUpload}>
+                <CloudUpload size={17} />Subir fatura
+              </button>
+            </div>
+          ) : displayItems.length > 0 ? (
+            <div className="history-items-scroll">
+              <div className="history-items-header">
+                <span>Data</span>
+                <span>Descrição</span>
+                <span>Parcela</span>
+                <span>Valor</span>
+                <span />
+              </div>
+              {displayItems.map((row) => (
+                <div className="history-item-row" key={row.id}>
+                  <span>{String(row.date || '').slice(0, 5)}</span>
+                  <strong>{row.description}</strong>
+                  <span>{row.installment && row.installment !== '-' ? row.installment.replace('/', ' de ') : '—'}</span>
+                  <b>{amountOnly(row.amount)}</b>
+                  <ChevronRight size={15} className="row-arrow" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="history-empty">
+              <CircleAlert size={28} />
+              <p>Nenhum item para este mês ainda.</p>
+            </div>
+          )}
+        </div>
+
+        {nextMonthForecast.length > 0 && (
+          <section className="forecast-box">
+            <Clock3 size={32} />
+            <span>
+              <strong>{monthNamesFull[nextMonthIndex]}/{nextMonthYear} — {nextMonthForecast.length} parcela{nextMonthForecast.length > 1 ? 's' : ''} prevista{nextMonthForecast.length > 1 ? 's' : ''}</strong>
+              <small>Parcelas remanescentes detectadas para o próximo mês.</small>
+            </span>
+            <button className="ghost" type="button" onClick={() => { setSelectedMonthIndex(nextMonthIndex); setSelectedYear(nextMonthYear); }}>
+              Ver previsão <ChevronRight size={18} />
+            </button>
+          </section>
+        )}
+
+      </div>
     </div>
   );
 }
