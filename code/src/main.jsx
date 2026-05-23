@@ -1221,12 +1221,31 @@ function CardModal({ onClose, onSave }) {
 function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
   const [parcelado, setParcelado] = useState(row?.installment && row.installment !== '-');
   const [draft, setDraft] = useState(row || item(`m-${Date.now()}`, getTodayFormatted(), '', '-', 0, true, true));
+  // Estado de texto separado para o campo Valor — evita NaN ao reeditar valor formatado
+  const [amountText, setAmountText] = useState(() =>
+    row?.amount && Number(row.amount) !== 0 ? amountOnly(row.amount) : ''
+  );
+
+  function handleAmountChange(raw) {
+    setAmountText(raw);
+    // Aceita "75,50" | "75.50" | "1.624,03" (formato BR com separador de milhar)
+    const c = raw.replace(/[^\d,.]/g, '');
+    let n;
+    if (c.includes('.') && c.includes(',')) {
+      // formato BR completo: ponto = milhar, vírgula = decimal
+      n = parseFloat(c.replace(/\./g, '').replace(',', '.'));
+    } else {
+      n = parseFloat(c.replace(',', '.'));
+    }
+    setDraft((prev) => ({ ...prev, amount: isNaN(n) ? 0 : n }));
+  }
+
   return (
     <ModalShell title={title} onClose={onClose}>
       <form className="modal-form" onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, installment: parcelado ? draft.installment : '-' }); }}>
         <div className="form-grid two">
           <Field label="Descrição da compra" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} />
-          <Field label="Valor da compra" value={draft.amount === 0 ? '' : money(draft.amount)} onChange={(amount) => setDraft({ ...draft, amount })} />
+          <Field label="Valor da compra" value={amountText} onChange={handleAmountChange} />
           <label className="field span-two"><span>Cartão</span><i><BankBadge bank={card.bank} /><input value={`${card.name}  •••• ${card.last4}`} readOnly /></i></label>
           <Field label="Data da compra" icon={CalendarDays} value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
         </div>
