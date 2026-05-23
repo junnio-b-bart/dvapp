@@ -617,7 +617,7 @@ function WalletPage({ card, items, totals, onView, onCloseInvoice }) {
 
 function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onAdd, onEdit, onSave }) {
   return (
-    <div className="page-stack">
+    <div className="page-stack invoices-stack">
       <section className="metric-grid wallet-grid">
         <Metric icon={FileText} title="Total da fatura" value={money(totals.all)} />
         <Metric icon={UserRound} title="Minha parte" value={money(totals.mine)} />
@@ -800,24 +800,16 @@ function HistoryPage({ items, totals, onUpload }) {
               </button>
             </div>
           ) : displayItems.length > 0 ? (
-            <div className="history-items-scroll">
-              <div className="history-items-header">
-                <span>Data</span>
-                <span>Descrição</span>
-                <span>Parcela</span>
-                <span>Valor</span>
-                <span />
-              </div>
-              {displayItems.map((row) => (
-                <div className="history-item-row" key={row.id}>
-                  <span>{String(row.date || '').slice(0, 5)}</span>
-                  <strong>{row.description}</strong>
-                  <span>{row.installment && row.installment !== '-' ? row.installment.replace('/', ' de ') : '—'}</span>
-                  <b>{amountOnly(row.amount)}</b>
-                  <ChevronRight size={15} className="row-arrow" />
-                </div>
-              ))}
-            </div>
+            <CleanTable
+              mode="wallet"
+              items={displayItems.map((r) => ({
+                ...r,
+                date: String(r.date || ''),
+                installment: r.installment && r.installment !== '-' ? r.installment : '',
+                mine: false,
+                manual: false,
+              }))}
+            />
           ) : (
             <div className="history-empty">
               <CircleAlert size={28} />
