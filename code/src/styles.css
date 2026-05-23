@@ -132,7 +132,27 @@
   .summary-bar.with-secondary{grid-template-columns:1fr auto}
   .summary-copy{min-width:0;overflow:hidden}
   .summary-copy strong,.summary-copy small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* botão de upload na barra inferior — compacto no mobile */
+  .summary-upload { min-height: 40px; font-size: 13px; padding: 0 10px; }
 }
+
+/* ── SummaryBar — extensões ────────────────────────────────────── */
+
+/* summary-copy com ícone (aba Faturas) */
+.summary-copy { display: flex; align-items: center; gap: 10px; }
+.summary-copy-icon { display: block; color: var(--teal-dark); flex-shrink: 0; }
+
+/* "de N" dentro do strong — menor e muted */
+.count-suffix { font-style: normal; font-size: 0.68em; font-weight: 600; color: var(--muted); }
+
+/* Spacer que ocupa a coluna esquerda quando não há info */
+.summary-spacer { display: block; min-width: 0; }
+
+/* Botão de upload dentro da barra de resumo */
+.summary-upload { white-space: nowrap; }
+
+/* Action-row sem o botão de Subir fatura (foi pro bottom bar) */
+.action-row.no-upload { grid-template-columns: 286px 118px minmax(180px,1fr); }
 
 /* ═══════════════════════════════════════════════════════════════
    HISTÓRICO — redesign alinhado ao sistema de design do app
@@ -405,4 +425,9 @@
   /* Modais */
   .modal-card    { padding: 28px 32px 26px; }
   .modal-card h2 { font-size: 24px; }
+
+  /* SummaryBar: grids por variante (só precisam existir no desktop;
+     no mobile a base .summary-bar{grid-template-columns:1fr auto} já vence) */
+  .summary-bar.bar-minimal { grid-template-columns: 1fr auto 330px; }
+  .summary-bar.with-upload { grid-template-columns: minmax(200px,1fr) auto 330px; }
 }

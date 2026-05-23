@@ -600,16 +600,12 @@ function WalletPage({ card, items, totals, onView, onCloseInvoice }) {
   return (
     <div className="page-stack">
       <section className="metric-grid wallet-grid">
-        <Metric icon={ReceiptIcon} title="Minha fatura" value={money(totals.mine)} badge={totals.mineCount > 0 ? 'Tudo certo' : null} />
+        <Metric icon={ReceiptIcon} title="Minha fatura" value={money(totals.mine)} />
         <Metric icon={List} title="Meus itens" value={`${totals.mineCount} itens`} />
       </section>
       <SectionTitle title="Minha fatura atual" />
       <CleanTable mode="wallet" items={items} />
       <SummaryBar
-        count={totals.mineCount}
-        label="itens na minha fatura"
-        totalLabel="Total dos meus itens"
-        total={money(totals.mine)}
         action="Ver fatura"
         onAction={onView}
         secondaryAction="Encerrar fatura"
@@ -622,14 +618,11 @@ function WalletPage({ card, items, totals, onView, onCloseInvoice }) {
 function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onAdd, onEdit, onSave }) {
   return (
     <div className="page-stack">
-      <section className="metric-grid invoice-grid">
+      <section className="metric-grid wallet-grid">
         <Metric icon={FileText} title="Total da fatura" value={money(totals.all)} />
-        {/* FIX: Badge "Tudo certo" só aparece se houver itens selecionados */}
-        <Metric icon={UserRound} title="Minha parte" value={money(totals.mine)} badge={totals.mineCount > 0 ? 'Tudo certo' : null} />
-        <Metric icon={List} title="Itens selecionados" value={`${totals.mineCount} de ${totals.allCount}`} />
+        <Metric icon={UserRound} title="Minha parte" value={money(totals.mine)} />
       </section>
-      <div className="action-row">
-        <button className="primary wide" type="button" onClick={onUpload}><CloudUpload size={19} />Subir fatura</button>
+      <div className="action-row no-upload">
         <button className="ghost wide" type="button" onClick={onAdd}><Plus size={19} />Adicionar item manualmente</button>
         <button className="ghost small" type="button"><Filter size={18} />Filtros</button>
         <label className="search-field"><Search size={18} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar descrição" /></label>
@@ -637,12 +630,14 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
       <SectionTitle title="Fatura completa" />
       <CleanTable mode="invoice" items={items} onToggle={onToggle} onEdit={onEdit} />
       <SummaryBar
+        icon={List}
         count={totals.mineCount}
+        countSuffix={totals.allCount}
         label="itens selecionados"
-        totalLabel="Total selecionado"
-        total={money(totals.mine)}
         action="Salvar alterações"
         onAction={onSave}
+        uploadAction="Subir fatura"
+        onUpload={onUpload}
       />
     </div>
   );
@@ -1027,16 +1022,58 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
   );
 }
 
-function SummaryBar({ count, label, totalLabel, total, action, onAction, secondaryAction, onSecondary }) {
+function SummaryBar({ icon: Icon, count, countSuffix, label, totalLabel, total, action, onAction, secondaryAction, onSecondary, uploadAction, onUpload }) {
+  const hasCount  = count !== undefined;
+  const isMinimal = !hasCount && !total;
+  const hasUpload = Boolean(uploadAction);
+  const cls = [
+    'summary-bar',
+    secondaryAction ? 'with-secondary' : '',
+    isMinimal       ? 'bar-minimal'    : '',
+    hasUpload       ? 'with-upload'    : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <section className={`summary-bar ${secondaryAction ? 'with-secondary' : ''}`}>
-      <span className="summary-copy">
-        <strong>{count}</strong>
-        <small>{label}</small>
-      </span>
-      <span className="summary-total"><small>{totalLabel}</small><strong>{total}</strong></span>
-      {secondaryAction && <button className="ghost desktop-summary-action" type="button" onClick={onSecondary}>{secondaryAction}</button>}
-      <button className="primary summary-action" type="button" onClick={onAction}>{action}<ChevronRight size={26} /></button>
+    <section className={cls}>
+      {/* Lado esquerdo: info ou spacer */}
+      {hasCount ? (
+        <span className="summary-copy">
+          {Icon && <Icon size={20} className="summary-copy-icon" />}
+          <span>
+            <strong>
+              {count}
+              {countSuffix !== undefined && <em className="count-suffix"> de {countSuffix}</em>}
+            </strong>
+            {label && <small>{label}</small>}
+          </span>
+        </span>
+      ) : (
+        <span className="summary-spacer" aria-hidden="true" />
+      )}
+
+      {/* Total (opcional — mantido para uso futuro) */}
+      {total && (
+        <span className="summary-total"><small>{totalLabel}</small><strong>{total}</strong></span>
+      )}
+
+      {/* Ação secundária desktop (ex.: Encerrar fatura) */}
+      {secondaryAction && (
+        <button className="ghost desktop-summary-action" type="button" onClick={onSecondary}>
+          {secondaryAction}
+        </button>
+      )}
+
+      {/* Botão de upload dentro da barra (ex.: Subir fatura) */}
+      {hasUpload && (
+        <button className="ghost summary-upload" type="button" onClick={onUpload}>
+          <CloudUpload size={18} /><span>{uploadAction}</span>
+        </button>
+      )}
+
+      {/* Ação primária */}
+      <button className="primary summary-action" type="button" onClick={onAction}>
+        {action}<ChevronRight size={26} />
+      </button>
     </section>
   );
 }
