@@ -655,6 +655,8 @@ function HistoryPage({ items, totals, onUpload }) {
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(currentMonthIndex);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [yearOpen, setYearOpen] = useState(false);
+  const stripRef = useRef(null);
+  const stripFirstRender = useRef(true);
 
   const monthDiff = (selectedYear - currentYear) * 12 + (selectedMonthIndex - currentMonthIndex);
   const isCurrentMonth = monthDiff === 0;
@@ -682,6 +684,17 @@ function HistoryPage({ items, totals, onUpload }) {
     setSelectedMonthIndex(newIndex);
     setSelectedYear(newYear);
   }
+
+  // Centra o mês selecionado no carrossel (mobile)
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const chip = strip.children[selectedMonthIndex];
+    if (!chip) return;
+    const behavior = stripFirstRender.current ? 'auto' : 'smooth';
+    stripFirstRender.current = false;
+    strip.scrollTo({ left: chip.offsetLeft - strip.clientWidth / 2 + chip.offsetWidth / 2, behavior });
+  }, [selectedMonthIndex, selectedYear]);
 
   const status = getMonthStatus(selectedMonthIndex, selectedYear);
   const statusLabel = { closed: 'Fechada', current: 'Atual', forecast: 'Previsão', empty: 'Sem dados' }[status];
@@ -748,7 +761,7 @@ function HistoryPage({ items, totals, onUpload }) {
 
           <div className="month-strip-row">
             <button className="strip-arrow" type="button" onClick={() => navigate(-1)}><ChevronLeft size={17} /></button>
-            <div className="month-strip">
+            <div className="month-strip" ref={stripRef}>
               {monthNamesShort.map((name, index) => {
                 const s = getMonthStatus(index, selectedYear);
                 return (

@@ -138,8 +138,9 @@
    HISTÓRICO — redesign alinhado ao sistema de design do app
    ═══════════════════════════════════════════════════════════════ */
 
-/* Sem SummaryBar → cancela o padding-bottom reservado para ela */
-.history-stack { padding-bottom: 32px; }
+/* Sem SummaryBar → cancela o padding-bottom reservado para ela.
+   Usa dois seletores (maior especificidade) para vencer o @media desktop. */
+.page-stack.history-stack { padding-bottom: 32px; }
 
 /* Wrapper interno: coluna com o mesmo gap das outras abas */
 .history-page { display: flex; flex-direction: column; gap: 22px; }
@@ -310,8 +311,17 @@
   .history-nav-top      { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
   .history-legend       { gap: 10px; }
   .history-legend > span { font-size: 11px; gap: 4px; }
-  .month-strip          { gap: 2px; }
-  .month-chip           { font-size: 10px; padding: 8px 2px 6px; border-radius: 9px; }
+  /* ── Carrossel de meses: overflow oculto, JS centra o chip ativo ── */
+  .month-strip {
+    display: flex;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 5px;
+  }
+  .month-strip::-webkit-scrollbar { display: none; }
+  .month-chip { flex: 0 0 56px; font-size: 10px; padding: 8px 3px 6px; border-radius: 9px; }
   .history-detail-head  { flex-wrap: wrap; gap: 10px; }
   .history-detail-title h2 { font-size: 18px; }
   .history-items-scroll { max-height: 320px; }
@@ -323,4 +333,76 @@
   .history-items-scroll { max-height: 260px; }
   .history-items-header,
   .history-item-row { grid-template-columns: 40px 1fr 58px 68px 18px; padding: 0 8px; font-size: 11px; }
+  .month-chip { flex: 0 0 50px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DESKTOP — tamanhos compactos para web-app em tela cheia de PC
+   (sobrescreve o padrão "mobile-first big touch targets" acima)
+   ═══════════════════════════════════════════════════════════════ */
+@media(min-width:1121px) {
+  /* Topbar mais baixa */
+  .topbar {
+    height: 76px;
+    grid-template-columns: 250px 1fr auto;
+    gap: 20px;
+    padding: 0 28px;
+  }
+  .logo strong { font-size: 22px; }
+  .logo-mark   { width: 33px; height: 33px; }
+
+  /* Nav e avatares menores */
+  .desktop-nav           { gap: 24px; }
+  .nav-button            { min-width: 92px; gap: 8px; font-size: 14px; }
+  .avatar-button         { width: 44px; height: 44px; font-size: 15px; }
+
+  /* Layout: sidebar mais estreita, workspace sem tanta folga */
+  .layout    { grid-template-columns: 270px minmax(0,1fr); height: calc(100vh - 100px); }
+  .sidebar   { padding: 26px 22px; gap: 14px; }
+  .workspace { padding: 22px 28px 20px; }
+
+  /* Cards de cartão na sidebar */
+  .card-tile, .add-card { min-height: 66px; }
+  .card-tile strong     { font-size: 15px; }
+  .card-tile small      { font-size: 14px; }
+
+  /* Métricas */
+  .metric-card {
+    min-height: 126px;
+    grid-template-columns: 70px 1fr;
+    gap: 12px;
+    padding: 18px 20px;
+  }
+  .metric-card strong { font-size: 25px; }
+  .round-icon         { width: 58px; height: 58px; }
+
+  /* Títulos de seção */
+  .section-title { margin: 22px 0 12px; font-size: 20px; }
+
+  /* Tabela de itens */
+  .table-card { max-height: 300px; }
+  .table-header, .table-line { min-height: 50px; padding: 0 20px; }
+
+  /* Botões */
+  .primary, .ghost, .danger-button { min-height: 44px; font-size: 15px; }
+
+  /* Barra de resumo */
+  .summary-bar         { padding: 15px 20px; }
+  .summary-copy strong { font-size: 24px; }
+  .summary-total strong{ font-size: 23px; }
+  .summary-action      { min-height: 50px; font-size: 15px; }
+
+  /* Settings */
+  .settings-card         { padding: 22px 24px; }
+  .collapsible-trigger h1{ font-size: 19px; }
+
+  /* Histórico */
+  .history-nav-card        { padding: 18px 20px; }
+  .history-detail-card     { padding: 22px 24px; }
+  .history-detail-title h2 { font-size: 19px; }
+  .history-items-scroll    { max-height: 340px; }
+
+  /* Modais */
+  .modal-card    { padding: 28px 32px 26px; }
+  .modal-card h2 { font-size: 24px; }
 }
