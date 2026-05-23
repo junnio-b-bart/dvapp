@@ -985,14 +985,77 @@ function SectionTitle({ title }) {
 }
 
 function CleanTable({ items, mode, compact, onToggle, onEdit }) {
+  // ── Ordenação por coluna ───────────────────────────────────────
+  // sortKey: null | 'date' | 'description' | 'installment' | 'amount'
+  // sortDir: 'asc' | 'desc'
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('desc');
+
+  function handleSort(key, defaultDir) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(defaultDir);
+    }
+  }
+
+  // Indicador visual: ⇅ quando inativo, ▴/▾ quando ativo
+  function SortIcon({ colKey }) {
+    if (sortKey !== colKey) return <span className="sort-off">⇅</span>;
+    return <span className="sort-on">{sortDir === 'asc' ? '▴' : '▾'}</span>;
+  }
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return items;
+    return [...items].sort((a, b) => {
+      let v = 0;
+      if (sortKey === 'date') {
+        // Parseia "DD/MM/YYYY" ou "DD/MM" → número comparável
+        const p = (s) => {
+          const parts = (s || '').split('/');
+          if (parts.length === 3) return +parts[2] * 10000 + +parts[1] * 100 + +parts[0];
+          if (parts.length === 2) return +parts[1] * 100 + +parts[0];
+          return 0;
+        };
+        v = p(a.date) - p(b.date);
+      } else if (sortKey === 'description') {
+        v = (a.description || '').localeCompare(b.description || '', 'pt-BR', { sensitivity: 'base' });
+      } else if (sortKey === 'installment') {
+        // Ordena pelo TOTAL de parcelas (número depois da "/")
+        const p = (s) => {
+          if (!s || s === '-') return 0;
+          const parts = s.split('/');
+          return parseInt(parts[1] || parts[0]) || 0;
+        };
+        v = p(a.installment) - p(b.installment);
+      } else if (sortKey === 'amount') {
+        const p = (x) => {
+          if (typeof x === 'number') return x;
+          return parseFloat(String(x).replace(/[^\d,.]/g, '').replace(',', '.')) || 0;
+        };
+        v = p(a.amount) - p(b.amount);
+      }
+      return sortDir === 'asc' ? v : -v;
+    });
+  }, [items, sortKey, sortDir]);
+
   return (
     <section className={`table-card ${compact ? 'compact' : ''}`}>
       <div className={`table-header ${mode}`}>
         {mode === 'invoice' && <span />}
-        <span>Data</span>
-        <span>Descrição</span>
-        <span>Parcela</span>
-        <span>Valor (R$)</span>
+        <span className="sortable" onClick={() => handleSort('date', 'desc')}>
+          Data <SortIcon colKey="date" />
+        </span>
+        <span className="sortable" onClick={() => handleSort('description', 'asc')}>
+          Descrição <SortIcon colKey="description" />
+        </span>
+        <span className="sortable" onClick={() => handleSort('installment', 'desc')}>
+          Parcela <SortIcon colKey="installment" />
+        </span>
+        <span className="sortable" onClick={() => handleSort('amount', 'desc')}>
+          Valor (R$) <SortIcon colKey="amount" />
+        </span>
         {mode === 'invoice' && <span>Ações</span>}
       </div>
       {items.length === 0 && (
@@ -1001,10 +1064,10 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
           <p>Nenhum item ainda. Suba uma fatura ou adicione manualmente.</p>
         </div>
       )}
-      {items.map((row) => (
+      {sorted.map((row) => (
         <div className={`table-line ${mode} ${row.mine ? 'selected' : ''}`} key={row.id}>
           {mode === 'invoice' && <button className="check-cell" type="button" onClick={() => onToggle(row.id)}>{row.mine && <Check size={15} />}</button>}
-          <span className="date-cell" data-short={row.date.slice(0, 5)}>{row.date}</span>
+          <span className="date-cell" data-short={(row.date || '').slice(0, 5)}>{row.date}</span>
           <strong>{row.description}{row.manual && <em>Manual</em>}</strong>
           <span>{row.installment}</span>
           <b>{amountOnly(row.amount)}</b>
