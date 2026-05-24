@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   CircleAlert,
   CircleCheck,
   Clock3,
@@ -524,8 +525,8 @@ function Topbar({ activeTab, badge, ownerInitials, onTab, onMenu, onNotification
 function Logo() {
   return (
     <button className="logo" type="button" aria-label="DivideConta">
-      <LogoMark />
-      <strong>DivideConta</strong>
+      <img src="/logofull.png" alt="DivideConta" className="logo-full-img" />
+      <img src="/logoicon.png" alt="DivideConta" className="logo-icon-img" />
     </button>
   );
 }
@@ -557,11 +558,9 @@ function Sidebar({ cards, current, open, onClose, onSelect, onAdd }) {
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-mobile-title">
           <Logo />
-          <button type="button" onClick={onClose}><X size={20} /></button>
         </div>
         <div className="sidebar-heading">
           <span>MEUS CARTÕES</span>
-          <button type="button" onClick={onAdd} aria-label="Adicionar cartão"><Plus size={22} /></button>
         </div>
         <div className="card-list">
           {cards.map((card) => (
@@ -598,7 +597,7 @@ function BankBadge({ bank }) {
 // FIX: Usa o card prop para mostrar nome do cartão na carteira
 function WalletPage({ card, items, totals, onView, onCloseInvoice }) {
   return (
-    <div className="page-stack">
+    <div className="page-stack wallet-stack">
       <section className="metric-grid wallet-grid">
         <Metric icon={ReceiptIcon} title="Minha fatura" value={money(totals.mine)} />
         <Metric icon={List} title="Meus itens" value={`${totals.mineCount} itens`} />
@@ -623,8 +622,8 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
         <Metric icon={UserRound} title="Minha parte" value={money(totals.mine)} />
       </section>
       <div className="action-row no-upload">
-        <button className="ghost wide" type="button" onClick={onAdd}><Plus size={19} />Adicionar item manualmente</button>
-        <button className="ghost small" type="button"><Filter size={18} />Filtros</button>
+        <button className="primary add-item-btn" type="button" onClick={onAdd}><Plus size={19} />Adicionar item</button>
+        <button className="ghost small filters-btn" type="button"><Filter size={18} /><span className="filters-label">Filtros</span></button>
         <label className="search-field"><Search size={18} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar descrição" /></label>
       </div>
       <SectionTitle title="Fatura completa" />
@@ -634,6 +633,8 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
         count={totals.mineCount}
         countSuffix={totals.allCount}
         label="itens selecionados"
+        secondaryAction="Adicionar item"
+        onSecondary={onAdd}
         action="Salvar alterações"
         onAction={onSave}
         uploadAction="Subir fatura"
@@ -818,18 +819,6 @@ function HistoryPage({ items, totals, onUpload }) {
           )}
         </div>
 
-        {nextMonthForecast.length > 0 && (
-          <section className="forecast-box">
-            <Clock3 size={32} />
-            <span>
-              <strong>{monthNamesFull[nextMonthIndex]}/{nextMonthYear} — {nextMonthForecast.length} parcela{nextMonthForecast.length > 1 ? 's' : ''} prevista{nextMonthForecast.length > 1 ? 's' : ''}</strong>
-              <small>Parcelas remanescentes detectadas para o próximo mês.</small>
-            </span>
-            <button className="ghost" type="button" onClick={() => { setSelectedMonthIndex(nextMonthIndex); setSelectedYear(nextMonthYear); }}>
-              Ver previsão <ChevronRight size={18} />
-            </button>
-          </section>
-        )}
 
       </div>
     </div>
@@ -1091,7 +1080,7 @@ function SummaryBar({ icon: Icon, count, countSuffix, label, totalLabel, total, 
 
   return (
     <section className={cls}>
-      {/* Lado esquerdo: info ou spacer */}
+      {/* Lado esquerdo: info | secondaryAction (quando sem contagem) | spacer */}
       {hasCount ? (
         <span className="summary-copy">
           {Icon && <Icon size={20} className="summary-copy-icon" />}
@@ -1100,9 +1089,18 @@ function SummaryBar({ icon: Icon, count, countSuffix, label, totalLabel, total, 
               {count}
               {countSuffix !== undefined && <em className="count-suffix"> de {countSuffix}</em>}
             </strong>
-            {label && <small>{label}</small>}
+            {label && (
+              <small>
+                {label.split(' ')[0]}
+                {label.includes(' ') && <span className="label-optional"> {label.split(' ').slice(1).join(' ')}</span>}
+              </small>
+            )}
           </span>
         </span>
+      ) : secondaryAction ? (
+        <button className="ghost desktop-summary-action" type="button" onClick={onSecondary}>
+          {secondaryAction}
+        </button>
       ) : (
         <span className="summary-spacer" aria-hidden="true" />
       )}
@@ -1112,8 +1110,8 @@ function SummaryBar({ icon: Icon, count, countSuffix, label, totalLabel, total, 
         <span className="summary-total"><small>{totalLabel}</small><strong>{total}</strong></span>
       )}
 
-      {/* Ação secundária desktop (ex.: Encerrar fatura) */}
-      {secondaryAction && (
+      {/* Ação secundária quando há contagem (fica entre o count e o botão primário) */}
+      {secondaryAction && hasCount && (
         <button className="ghost desktop-summary-action" type="button" onClick={onSecondary}>
           {secondaryAction}
         </button>
@@ -1167,29 +1165,87 @@ function BrandChips({ value, onChange }) {
     ['amex', 'AMEX'],
     ['hipercard', 'Hipercard'],
   ];
+  const [expanded, setExpanded] = useState(!value);
+  const selectedLabel = brands.find(([id]) => id === value)?.[1] || value;
   return (
     <div className="brand-section">
-      <span>Bandeira</span>
-      <div className="brand-chips">
-        {brands.map(([id, label]) => <button className={value === id ? 'active' : ''} type="button" key={id} onClick={() => onChange(id)}>{brandVisual(id, label)}{value === id && <Check className="brand-check" size={16} />}</button>)}
+      <div className="brand-section-header">
+        <span>Bandeira</span>
+        {value && expanded && (
+          <button type="button" className="chips-expand-btn" title="Recolher" onClick={() => setExpanded(false)}>
+            <ChevronUp size={18} />
+          </button>
+        )}
       </div>
+      {value && !expanded ? (
+        <div className="chips-collapsed">
+          <div className="chips-selected">
+            {brandVisual(value, selectedLabel)}
+            <Check className="brand-check" size={16} />
+          </div>
+          <button type="button" className="chips-expand-btn" title="Trocar bandeira" onClick={() => setExpanded(true)}>
+            <ChevronDown size={18} />
+          </button>
+        </div>
+      ) : (
+        <div className="brand-chips">
+          {brands.map(([id, label]) => (
+            <button
+              className={value === id ? 'active' : ''}
+              type="button"
+              key={id}
+              onClick={() => { onChange(id); setExpanded(false); }}
+            >
+              {brandVisual(id, label)}
+              {value === id && <Check className="brand-check" size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function BankChips({ value, onChange }) {
+  const [expanded, setExpanded] = useState(!value);
+  const selectedLabel = banks.find(([id]) => id === value)?.[1];
   return (
     <div className="brand-section">
-      <span>Banco</span>
-      <div className="bank-chips">
-        {banks.map(([id, label]) => (
-          <button className={value === id ? 'active' : ''} type="button" key={id} onClick={() => onChange(id)}>
-            <BankBadge bank={id} />
-            <span>{label}</span>
-            {value === id && <Check className="brand-check" size={16} />}
+      <div className="brand-section-header">
+        <span>Banco</span>
+        {value && expanded && (
+          <button type="button" className="chips-expand-btn" title="Recolher" onClick={() => setExpanded(false)}>
+            <ChevronUp size={18} />
           </button>
-        ))}
+        )}
       </div>
+      {value && !expanded ? (
+        <div className="chips-collapsed">
+          <div className="chips-selected">
+            <BankBadge bank={value} />
+            <span>{selectedLabel}</span>
+            <Check className="brand-check" size={16} />
+          </div>
+          <button type="button" className="chips-expand-btn" title="Trocar banco" onClick={() => setExpanded(true)}>
+            <ChevronDown size={18} />
+          </button>
+        </div>
+      ) : (
+        <div className="bank-chips">
+          {banks.map(([id, label]) => (
+            <button
+              className={value === id ? 'active' : ''}
+              type="button"
+              key={id}
+              onClick={() => { onChange(id); setExpanded(false); }}
+            >
+              <BankBadge bank={id} />
+              <span>{label}</span>
+              {value === id && <Check className="brand-check" size={16} />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
