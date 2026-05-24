@@ -3,6 +3,29 @@
 /* ── Remove gradiente radial (círculo teal) do fundo da sidebar ── */
 .sidebar { background: linear-gradient(180deg, #071d39, #03162d); }
 
+/* ── Temas de cor ───────────────────────────────────────────── */
+
+/* Swatches nos chips de seleção de tema */
+.swatch-ocean  { background: linear-gradient(135deg, #08c6cd, #078f99); }
+.swatch-orange { background: linear-gradient(135deg, #fb923c, #ea580c); }
+.swatch-amber  { background: linear-gradient(135deg, #fbbf24, #d97706); }
+
+/* Laranja ─ variáveis + elementos com gradiente hardcoded */
+:root.theme-orange {
+  --teal:      #f97316;
+  --teal-dark: #ea580c;
+}
+:root.theme-orange .primary    { background: linear-gradient(180deg, #fb923c, #ea580c); }
+:root.theme-orange .round-icon { background: linear-gradient(180deg, #fb923c, #ea580c); }
+
+/* Âmbar ─ variáveis + elementos com gradiente hardcoded */
+:root.theme-amber {
+  --teal:      #f59e0b;
+  --teal-dark: #d97706;
+}
+:root.theme-amber .primary    { background: linear-gradient(180deg, #fbbf24, #d97706); }
+:root.theme-amber .round-icon { background: linear-gradient(180deg, #fbbf24, #d97706); }
+
 /* ── Logo imagens ───────────────────────────────────────────── */
 /* Desktop: mostra logo completa, esconde só ícone */
 .logo-full-img  { height: 38px; width: auto; display: block; object-fit: contain; }

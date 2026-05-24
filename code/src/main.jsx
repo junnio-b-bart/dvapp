@@ -183,6 +183,7 @@ function App({ session }) {
     invoiceIdByCard: {},
     notifications: { closing: true, due: true, forecast: true, upload: true, overdue: true },
     profileName: '',   // nome do usuário no app (profiles.name)
+    theme: localStorage.getItem('app-theme') || 'ocean',
   });
   const [modal, setModal] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -236,6 +237,14 @@ function App({ session }) {
   function update(patch) {
     setState((prev) => ({ ...prev, ...patch }));
   }
+
+  // Aplica o tema de cor no <html> e persiste
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('theme-orange', 'theme-amber');
+    if (state.theme !== 'ocean') root.classList.add(`theme-${state.theme}`);
+    localStorage.setItem('app-theme', state.theme);
+  }, [state.theme]);
 
   function setTab(tab) {
     update({ activeTab: tab, drawerOpen: false });
@@ -471,6 +480,8 @@ function App({ session }) {
                   card={selectedCard}
                   profileName={state.profileName}
                   notifications={state.notifications}
+                  theme={state.theme}
+                  onTheme={(theme) => update({ theme })}
                   onChangeCard={updateCard}
                   onSaveProfile={async (name) => {
                     update({ profileName: name });
@@ -841,7 +852,13 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
-function SettingsPage({ card, profileName, notifications, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
+const THEMES = [
+  { id: 'ocean',  label: 'Azul oceano' },
+  { id: 'orange', label: 'Laranja'     },
+  { id: 'amber',  label: 'Âmbar'       },
+];
+
+function SettingsPage({ card, profileName, notifications, theme = 'ocean', onTheme, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
   const [draft, setDraft] = useState(card);
   const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -921,9 +938,18 @@ function SettingsPage({ card, profileName, notifications, onChangeCard, onSavePr
         />
         <h3 className="settings-section-title">Cor geral / tema</h3>
         <div className="theme-list">
-          <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
-          <button className="theme-chip" type="button"><span className="swatch green" />Verde</button>
-          <button className="theme-chip" type="button"><span className="swatch purple" />Roxo</button>
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              className={`theme-chip${theme === t.id ? ' active' : ''}`}
+              type="button"
+              onClick={() => onTheme?.(t.id)}
+            >
+              <span className={`swatch swatch-${t.id}`} />
+              {t.label}
+              {theme === t.id && <Check size={15} />}
+            </button>
+          ))}
         </div>
       </CollapsibleCard>
 
