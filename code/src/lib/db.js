@@ -28,6 +28,10 @@ export async function signOut() {
   return supabase.auth.signOut();
 }
 
+export async function updatePassword(newPassword) {
+  return supabase.auth.updateUser({ password: newPassword });
+}
+
 export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }

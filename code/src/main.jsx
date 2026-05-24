@@ -21,6 +21,8 @@ import {
   History,
   Info,
   List,
+  Lock,
+  LogOut,
   Menu,
   Pencil,
   Plus,
@@ -477,11 +479,13 @@ function App({ session }) {
               {state.activeTab === 'historico' && <HistoryPage items={myItems} totals={totals} onUpload={() => setModal('upload')} />}
               {state.activeTab === 'ajustes' && (
                 <SettingsPage
+                  session={session}
                   card={selectedCard}
                   profileName={state.profileName}
                   notifications={state.notifications}
                   theme={state.theme}
                   onTheme={(theme) => update({ theme })}
+                  onSignOut={db.signOut}
                   onChangeCard={updateCard}
                   onSaveProfile={async (name) => {
                     update({ profileName: name });
@@ -852,13 +856,75 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
+function AccountCard({ session, profileName, onSignOut }) {
+  const [changingPw, setChangingPw] = useState(false);
+  const [pwDraft, setPwDraft]       = useState({ next: '', confirm: '' });
+  const [pwStatus, setPwStatus]     = useState(''); // '' | 'saving' | 'saved' | 'error:...'
+
+  const email    = session?.user?.email || '';
+  const initials = (profileName || email || 'U')
+    .split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
+  async function handleSavePw() {
+    if (pwDraft.next.length < 6)             { setPwStatus('error:Mínimo 6 caracteres'); return; }
+    if (pwDraft.next !== pwDraft.confirm)    { setPwStatus('error:As senhas não coincidem'); return; }
+    setPwStatus('saving');
+    const { error } = await db.updatePassword(pwDraft.next);
+    if (error) { setPwStatus(`error:${error.message}`); return; }
+    setPwStatus('saved');
+    setTimeout(() => { setChangingPw(false); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }, 1400);
+  }
+
+  function cancelPw() { setChangingPw(false); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }
+
+  return (
+    <CollapsibleCard title="Minha conta" subtitle={email} defaultOpen={true}>
+      {/* ── Cabeçalho com avatar ── */}
+      <div className="account-header">
+        <span className="account-avatar">{initials}</span>
+        <div>
+          <strong className="account-name">{profileName || 'Usuário'}</strong>
+          <span className="account-email">{email}</span>
+        </div>
+      </div>
+
+      {/* ── Trocar senha ── */}
+      {changingPw ? (
+        <div className="account-pw-form">
+          <div className="form-grid two">
+            <Field label="Nova senha"        type="password" value={pwDraft.next}     onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
+            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm} onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
+          </div>
+          {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
+          {pwStatus === 'saved'           && <p className="account-msg success">Senha alterada com sucesso!</p>}
+          <div className="account-actions">
+            <button className="ghost small" type="button" onClick={cancelPw}>Cancelar</button>
+            <button className="primary small" type="button" disabled={pwStatus === 'saving'} onClick={handleSavePw}>
+              {pwStatus === 'saving' ? 'Salvando…' : 'Salvar senha'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="account-actions">
+          <button className="ghost small account-action-btn" type="button" onClick={() => setChangingPw(true)}>
+            <Lock size={15} /> Alterar senha
+          </button>
+          <button className="danger-link account-signout" type="button" onClick={onSignOut}>
+            <LogOut size={15} /> Sair da conta
+          </button>
+        </div>
+      )}
+    </CollapsibleCard>
+  );
+}
+
 const THEMES = [
   { id: 'ocean',  label: 'Azul oceano' },
   { id: 'orange', label: 'Laranja'     },
   { id: 'purple', label: 'Roxo'        },
 ];
 
-function SettingsPage({ card, profileName, notifications, theme = 'ocean', onTheme, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
+function SettingsPage({ session, card, profileName, notifications, theme = 'ocean', onTheme, onSignOut, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
   const [draft, setDraft] = useState(card);
   const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -928,6 +994,9 @@ function SettingsPage({ card, profileName, notifications, theme = 'ocean', onThe
         {saveStatus === 'saving' && <span className="autosave-indicator saving"><span className="spinner-dot" />Salvando…</span>}
         {saveStatus === 'saved'  && <span className="autosave-indicator saved"><Check size={14} />Salvo</span>}
       </div>
+
+      {/* ── Minha conta ── */}
+      <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} />
 
       {/* ── Ajustes do app ── (primeiro, expandido por padrão) */}
       <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta." defaultOpen={true}>

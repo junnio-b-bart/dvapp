@@ -492,6 +492,31 @@
 .status-pill.pill-forecast { background: #fff1df; color: var(--orange); }
 .status-pill.pill-empty    { background: #f1f4f8; color: #6a7789; }
 
+/* ── AccountCard ───────────────────────────────────────────────── */
+.account-header {
+  display: flex; align-items: center; gap: 16px;
+  margin-bottom: 20px;
+}
+.account-avatar {
+  flex-shrink: 0;
+  width: 52px; height: 52px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+  color: #fff; font-weight: 800; font-size: 18px;
+}
+.account-name  { display: block; font-size: 16px; font-weight: 700; color: var(--navy); }
+.account-email { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.account-actions {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.account-action-btn { min-width: 0; }
+.account-signout    { margin-left: auto; }
+.account-pw-form    { display: grid; gap: 14px; }
+.account-msg        { margin: 0; font-size: 13px; font-weight: 600; }
+.account-msg.error  { color: var(--red); }
+.account-msg.success{ color: var(--green); }
+
 /* ── Autosave indicator ────────────────────────────────────────── */
 .autosave-status {
   display: flex; justify-content: flex-end;
