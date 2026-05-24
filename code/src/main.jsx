@@ -912,8 +912,23 @@ function SettingsPage({ card, profileName, notifications, onChangeCard, onSavePr
         {saveStatus === 'saved'  && <span className="autosave-indicator saved"><Check size={14} />Salvo</span>}
       </div>
 
+      {/* ── Ajustes do app ── (primeiro, expandido por padrão) */}
+      <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta." defaultOpen={true}>
+        <Field
+          label="Seu nome no app"
+          value={profileDraft}
+          onChange={setProfileDraft}
+        />
+        <h3 className="settings-section-title">Cor geral / tema</h3>
+        <div className="theme-list">
+          <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
+          <button className="theme-chip" type="button"><span className="swatch green" />Verde</button>
+          <button className="theme-chip" type="button"><span className="swatch purple" />Roxo</button>
+        </div>
+      </CollapsibleCard>
+
       {/* ── Ajustes do cartão ── */}
-      <CollapsibleCard title="Ajustes do cartão" subtitle="Edite as informações do seu cartão.">
+      <CollapsibleCard title="Ajustes do cartão" subtitle="Edite as informações do seu cartão." defaultOpen={false}>
         <div className="form-grid">
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => updateDraft({ name })} />
           <Field label="Finais do cartão" value={draft.last4} onChange={(last4) => updateDraft({ last4 })} />
@@ -928,23 +943,8 @@ function SettingsPage({ card, profileName, notifications, onChangeCard, onSavePr
         </div>
       </CollapsibleCard>
 
-      {/* ── Ajustes do app ── */}
-      <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta.">
-        <Field
-          label="Seu nome no app"
-          value={profileDraft}
-          onChange={setProfileDraft}
-        />
-        <h3 className="settings-section-title">Cor geral / tema</h3>
-        <div className="theme-list">
-          <button className="theme-chip active" type="button"><span className="swatch teal" />Azul oceano<Check size={15} /></button>
-          <button className="theme-chip" type="button"><span className="swatch green" />Verde</button>
-          <button className="theme-chip" type="button"><span className="swatch purple" />Roxo</button>
-        </div>
-      </CollapsibleCard>
-
       {/* ── Notificações ── */}
-      <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber.">
+      <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber." defaultOpen={false}>
         <NotificationPanel values={notifications} onChange={handleNotifChange} />
       </CollapsibleCard>
     </div>
