@@ -8,23 +8,38 @@
 /* Swatches nos chips de seleção de tema */
 .swatch-ocean  { background: linear-gradient(135deg, #08c6cd, #078f99); }
 .swatch-orange { background: linear-gradient(135deg, #fb923c, #ea580c); }
-.swatch-amber  { background: linear-gradient(135deg, #fbbf24, #d97706); }
+.swatch-purple { background: linear-gradient(135deg, #a78bfa, #6d28d9); }
 
-/* Laranja ─ variáveis + elementos com gradiente hardcoded */
+/* ── Laranja ─────────────────────────────────────────────────── */
 :root.theme-orange {
   --teal:      #f97316;
   --teal-dark: #ea580c;
 }
 :root.theme-orange .primary    { background: linear-gradient(180deg, #fb923c, #ea580c); }
 :root.theme-orange .round-icon { background: linear-gradient(180deg, #fb923c, #ea580c); }
+/* Desktop: sidebar + topbar quentes e escuros */
+:root.theme-orange .sidebar,
+:root.theme-orange .topbar     { background: linear-gradient(180deg, #1e0d03, #110700); }
 
-/* Âmbar ─ variáveis + elementos com gradiente hardcoded */
-:root.theme-amber {
-  --teal:      #f59e0b;
-  --teal-dark: #d97706;
+/* ── Roxo ────────────────────────────────────────────────────── */
+:root.theme-purple {
+  --teal:      #8b5cf6;
+  --teal-dark: #7c3aed;
 }
-:root.theme-amber .primary    { background: linear-gradient(180deg, #fbbf24, #d97706); }
-:root.theme-amber .round-icon { background: linear-gradient(180deg, #fbbf24, #d97706); }
+:root.theme-purple .primary    { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+:root.theme-purple .round-icon { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+/* Desktop: sidebar + topbar escuros violeta */
+:root.theme-purple .sidebar,
+:root.theme-purple .topbar     { background: linear-gradient(180deg, #160b2e, #0b0520); }
+
+/* ── Overrides mobile por tema (vence o azul padrão do @media) ── */
+@media(max-width:1120px) {
+  :root.theme-orange .topbar,
+  :root.theme-orange .sidebar { background: linear-gradient(180deg, #7a3510, #4f2008); }
+
+  :root.theme-purple .topbar,
+  :root.theme-purple .sidebar { background: linear-gradient(180deg, #3b1870, #25104e); }
+}
 
 /* ── Logo imagens ───────────────────────────────────────────── */
 /* Desktop: mostra logo completa, esconde só ícone */

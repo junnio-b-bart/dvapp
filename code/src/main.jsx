@@ -241,7 +241,7 @@ function App({ session }) {
   // Aplica o tema de cor no <html> e persiste
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove('theme-orange', 'theme-amber');
+    root.classList.remove('theme-orange', 'theme-amber', 'theme-purple');
     if (state.theme !== 'ocean') root.classList.add(`theme-${state.theme}`);
     localStorage.setItem('app-theme', state.theme);
   }, [state.theme]);
@@ -855,7 +855,7 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
 const THEMES = [
   { id: 'ocean',  label: 'Azul oceano' },
   { id: 'orange', label: 'Laranja'     },
-  { id: 'amber',  label: 'Âmbar'       },
+  { id: 'purple', label: 'Roxo'        },
 ];
 
 function SettingsPage({ card, profileName, notifications, theme = 'ocean', onTheme, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
