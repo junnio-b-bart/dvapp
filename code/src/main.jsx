@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   Bell,
@@ -1348,6 +1349,171 @@ function CurrencyField({ label, value, onChange }) {
   );
 }
 
+/* ── DatePickerField — calendário flutuante ─────────────────────
+   value  : string "DD/MM/AAAA" (ou vazio)
+   onChange: recebe string "DD/MM/AAAA" */
+function DatePickerField({ label, value, onChange }) {
+  const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const WDAYS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+  const todayStr = getTodayFormatted();
+
+  function parseValue(v) {
+    const today = new Date();
+    if (!v) return { day: today.getDate(), month: today.getMonth() + 1, year: today.getFullYear() };
+    const parts = v.split('/').map(Number);
+    if (parts.length !== 3 || parts.some((n) => isNaN(n) || n === 0))
+      return { day: today.getDate(), month: today.getMonth() + 1, year: today.getFullYear() };
+    return { day: parts[0], month: parts[1], year: parts[2] };
+  }
+
+  const parsed = parseValue(value);
+  const [open, setOpen]         = useState(false);
+  const [view, setView]         = useState('days');   // 'days' | 'months' | 'years'
+  const [cursor, setCursor]     = useState({ month: parsed.month, year: parsed.year });
+  const [popStyle, setPopStyle] = useState({});
+  const triggerRef = useRef(null);
+  const popRef     = useRef(null);
+
+  function openPicker() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const pickerH = 320;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top  = spaceBelow >= pickerH + 8 ? rect.bottom + 4 : rect.top - pickerH - 4;
+    const left = Math.min(rect.left, window.innerWidth - 292);
+    setPopStyle({ top, left, width: Math.max(rect.width, 280) });
+    const p = parseValue(value);
+    setCursor({ month: p.month, year: p.year });
+    setView('days');
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function close(e) {
+      if (
+        popRef.current && !popRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) setOpen(false);
+    }
+    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
+    document.addEventListener('mousedown', close, true);
+    document.addEventListener('touchstart', close, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', close, true);
+      document.removeEventListener('touchstart', close, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  function selectDate(d) {
+    const dd = String(d).padStart(2, '0');
+    const mm = String(cursor.month).padStart(2, '0');
+    onChange(`${dd}/${mm}/${cursor.year}`);
+    setOpen(false);
+  }
+
+  function buildDays() {
+    const firstDay    = new Date(cursor.year, cursor.month - 1, 1).getDay();
+    const daysInMonth = new Date(cursor.year, cursor.month, 0).getDate();
+    const cells = Array(firstDay).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  }
+
+  function buildYears() {
+    const base = Math.floor(cursor.year / 12) * 12;
+    return Array.from({ length: 12 }, (_, i) => base + i);
+  }
+
+  const cells    = buildDays();
+  const years    = buildYears();
+  const yearBase = Math.floor(cursor.year / 12) * 12;
+
+  return (
+    <>
+      <label className="field dp-trigger" ref={triggerRef} onClick={openPicker}>
+        <span>{label}</span>
+        <i>
+          <CalendarDays size={17} />
+          <input
+            type="text"
+            value={value || ''}
+            readOnly
+            placeholder="DD/MM/AAAA"
+          />
+        </i>
+      </label>
+
+      {open && createPortal(
+        <div className="dp-popup" ref={popRef} style={popStyle}>
+
+          {view === 'days' && <>
+            <div className="dp-header">
+              <button type="button" className="dp-nav"
+                onClick={() => setCursor((c) => c.month === 1 ? { month: 12, year: c.year - 1 } : { ...c, month: c.month - 1 })}>‹</button>
+              <button type="button" className="dp-title" onClick={() => setView('months')}>
+                {MONTHS[cursor.month - 1]} {cursor.year}
+              </button>
+              <button type="button" className="dp-nav"
+                onClick={() => setCursor((c) => c.month === 12 ? { month: 1, year: c.year + 1 } : { ...c, month: c.month + 1 })}>›</button>
+            </div>
+            <div className="dp-wdays">{WDAYS.map((w) => <span key={w}>{w}</span>)}</div>
+            <div className="dp-grid">
+              {cells.map((d, i) => {
+                if (d === null) return <span key={`e${i}`} />;
+                const dStr = `${String(d).padStart(2,'0')}/${String(cursor.month).padStart(2,'0')}/${cursor.year}`;
+                return (
+                  <button key={d} type="button"
+                    className={`dp-day${dStr === value ? ' selected' : ''}${dStr === todayStr ? ' today' : ''}`}
+                    onClick={() => selectDate(d)}
+                  >{d}</button>
+                );
+              })}
+            </div>
+          </>}
+
+          {view === 'months' && <>
+            <div className="dp-header">
+              <button type="button" className="dp-nav" onClick={() => setCursor((c) => ({ ...c, year: c.year - 1 }))}>‹</button>
+              <button type="button" className="dp-title" onClick={() => setView('years')}>{cursor.year}</button>
+              <button type="button" className="dp-nav" onClick={() => setCursor((c) => ({ ...c, year: c.year + 1 }))}>›</button>
+            </div>
+            <div className="dp-months">
+              {MONTHS.map((m, i) => (
+                <button key={m} type="button"
+                  className={`dp-month${cursor.month === i + 1 ? ' selected' : ''}`}
+                  onClick={() => { setCursor((c) => ({ ...c, month: i + 1 })); setView('days'); }}
+                >{m}</button>
+              ))}
+            </div>
+          </>}
+
+          {view === 'years' && <>
+            <div className="dp-header">
+              <button type="button" className="dp-nav" onClick={() => setCursor((c) => ({ ...c, year: c.year - 12 }))}>‹</button>
+              <button type="button" className="dp-title">{yearBase} – {yearBase + 11}</button>
+              <button type="button" className="dp-nav" onClick={() => setCursor((c) => ({ ...c, year: c.year + 12 }))}>›</button>
+            </div>
+            <div className="dp-years">
+              {years.map((y) => (
+                <button key={y} type="button"
+                  className={`dp-year${cursor.year === y ? ' selected' : ''}`}
+                  onClick={() => { setCursor((c) => ({ ...c, year: y })); setView('months'); }}
+                >{y}</button>
+              ))}
+            </div>
+          </>}
+
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function Field({ label, value, onChange, icon: Icon, type = 'text' }) {
   const [showPassword, setShowPassword] = useState(false);
   const inputType = type === 'password' ? (showPassword ? 'text' : 'password') : type;
@@ -1597,7 +1763,7 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
           <Field label="Descrição da compra" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} />
           <CurrencyField label="Valor da compra" value={draft.amount} onChange={(v) => setDraft((d) => ({ ...d, amount: v }))} />
           <label className="field span-two"><span>Cartão</span><i><BankBadge bank={card.bank} /><input value={`${card.name}  •••• ${card.last4}`} readOnly /></i></label>
-          <Field label="Data da compra" icon={CalendarDays} value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
+          <DatePickerField label="Data da compra" value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
         </div>
 
         <div className="installment-mode">
