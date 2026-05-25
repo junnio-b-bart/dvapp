@@ -1049,11 +1049,11 @@ function AccountCard({ session, profileName, onSignOut, onEditAccount }) {
           <strong className="account-name">{profileName || 'Usuário'}</strong>
           <span className="account-email">{email}</span>
         </div>
+      </div>
+      <div className="account-actions">
         <button className="ghost small account-edit-btn" type="button" onClick={onEditAccount}>
           <Settings size={15} /> Editar conta
         </button>
-      </div>
-      <div className="account-actions">
         <button className="danger-link account-signout" type="button" onClick={onSignOut}>
           <LogOut size={15} /> Sair da conta
         </button>
