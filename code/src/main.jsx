@@ -899,7 +899,8 @@ function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
   function cancelPw() { setMode('idle'); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }
 
   return (
-    <CollapsibleCard title="Minha conta" defaultOpen={true}>
+    <section className="settings-card account-card">
+      <h1 className="account-card-title">Minha conta</h1>
 
       {/* ── Cabeçalho: avatar + info + botão editar ── */}
       <div className="account-header">
@@ -911,7 +912,7 @@ function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
         {mode === 'idle' && (
           <button className="ghost small account-edit-btn" type="button"
             onClick={() => { setEditDraft({ name: profileName || '', email, phone }); setMode('editing'); }}>
-            <Pencil size={14} /> Editar
+            <Settings size={15} /> Editar
           </button>
         )}
       </div>
@@ -967,7 +968,7 @@ function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
           </button>
         </div>
       )}
-    </CollapsibleCard>
+    </section>
   );
 }
 
