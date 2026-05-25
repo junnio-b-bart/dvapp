@@ -642,6 +642,17 @@
   .history-detail-card .table-card { max-height: 260px; }
 }
 
+/* ── Mobile: exibe avatar da conta ao lado do sino ─────────────── */
+@media(max-width:1120px) {
+  /* Avatar hidden pela regra minificada — reexibe aqui */
+  .avatar-button {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    DESKTOP — tamanhos compactos para web-app em tela cheia de PC
    (sobrescreve o padrão "mobile-first big touch targets" acima)
@@ -750,6 +761,75 @@
   /* Histórico: tabela de itens adaptativa à altura da tela (mesma lógica que Faturas) */
   .history-detail-card .table-card { max-height: max(220px, calc(100vh - 630px)); }
 
+}
+
+/* ── AccountDropdown (mini-popup da topbar) ─────────────────────── */
+.acct-chevron { cursor: pointer; color: #fff; opacity: .85; }
+.acct-dropdown {
+  position: fixed;
+  z-index: 9990;
+  background: #fff;
+  border: 1px solid #dce4ef;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(6, 26, 51, .18);
+  padding: 14px;
+  font-family: inherit;
+}
+.acct-dd-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.acct-dd-avatar { width: 38px; height: 38px; font-size: 14px; }
+.acct-dd-actions { display: flex; flex-direction: column; gap: 2px; }
+.acct-dd-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.acct-dd-btn:hover { background: #f1f5f9; }
+.acct-dd-btn.danger { color: var(--red); }
+.acct-dd-btn.danger:hover { background: #fff1f2; }
+
+/* ── EditAccountModal — abas ────────────────────────────────────── */
+.edit-account-modal { width: min(480px, 100%); }
+.edit-acct-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 22px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+.edit-acct-tabs button {
+  flex: 1;
+  min-height: 36px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.edit-acct-tabs button.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 1px 4px rgba(6,26,51,.1);
 }
 
 /* ── DatePickerField — calendário compacto ──────────────────────── */

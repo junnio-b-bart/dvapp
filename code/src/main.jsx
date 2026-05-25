@@ -429,10 +429,13 @@ function App({ session }) {
         activeTab={state.activeTab}
         badge={state.notificationBadge}
         ownerInitials={ownerInitials}
+        profileName={state.profileName}
+        session={session}
         onTab={setTab}
         onMenu={() => update({ drawerOpen: true })}
         onNotifications={() => setModal('notifications')}
         onSignOut={db.signOut}
+        onEditAccount={() => setModal('edit-account')}
       />
       <div className="layout">
         <Sidebar
@@ -495,6 +498,7 @@ function App({ session }) {
                   onNotifications={(notifications) => update({ notifications })}
                   onSaveNotifications={(notifications) => db.upsertNotificationSettings(userId, notifications)}
                   onDelete={() => setModal('delete-card')}
+                  onEditAccount={() => setModal('edit-account')}
                 />
               )}
             </>
@@ -510,12 +514,77 @@ function App({ session }) {
       {modal === 'close-invoice' && <CloseInvoiceModal card={selectedCard} onClose={() => setModal(null)} onConfirm={closeInvoice} />}
       {modal === 'delete-card' && <DeleteCardModal card={selectedCard} onClose={() => setModal(null)} onDelete={deleteCard} />}
       {modal === 'notifications' && <NotificationsModal values={state.notifications} onClose={() => setModal(null)} onSave={saveNotifications} />}
+      {modal === 'edit-account' && (
+        <EditAccountModal
+          session={session}
+          profileName={state.profileName}
+          onClose={() => setModal(null)}
+          onSaveProfile={async (name) => {
+            update({ profileName: name });
+            await db.updateProfile(userId, { name });
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// FIX: Recebe ownerInitials e exibe dinamicamente no avatar
-function Topbar({ activeTab, badge, ownerInitials, onTab, onMenu, onNotifications }) {
+/* Mini-dropdown da conta (portal, posicionado abaixo do avatar) */
+function AccountDropdown({ initials, profileName, email, onEditAccount, onSignOut, triggerRef, onClose }) {
+  const popRef = useRef(null);
+  const [style, setStyle] = useState({});
+
+  useEffect(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const W = 230;
+    const left = Math.max(8, Math.min(rect.right - W, window.innerWidth - W - 8));
+    setStyle({ top: rect.bottom + 6, left, width: W });
+  }, []);
+
+  useEffect(() => {
+    function close(e) {
+      if (popRef.current && !popRef.current.contains(e.target) && !triggerRef.current?.contains(e.target))
+        onClose();
+    }
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('mousedown', close, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', close, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, []);
+
+  return createPortal(
+    <div className="acct-dropdown" ref={popRef} style={style}>
+      <div className="acct-dd-header">
+        <span className="account-avatar acct-dd-avatar">{initials}</span>
+        <div className="account-info">
+          <strong className="account-name">{profileName || 'Usuário'}</strong>
+          <span className="account-email">{email}</span>
+        </div>
+      </div>
+      <div className="acct-dd-actions">
+        <button type="button" className="acct-dd-btn"
+          onClick={() => { onClose(); onEditAccount(); }}>
+          <Settings size={14} /> Editar conta
+        </button>
+        <button type="button" className="acct-dd-btn danger"
+          onClick={() => { onClose(); onSignOut(); }}>
+          <LogOut size={14} /> Sair
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function Topbar({ activeTab, badge, ownerInitials, profileName, session, onTab, onMenu, onNotifications, onSignOut, onEditAccount }) {
+  const [ddOpen, setDdOpen] = useState(false);
+  const acctRef = useRef(null);
+  const email = session?.user?.email || '';
+
   return (
     <header className="topbar">
       <button className="mobile-icon" type="button" onClick={onMenu} aria-label="Abrir menu"><Menu size={24} /></button>
@@ -531,9 +600,30 @@ function Topbar({ activeTab, badge, ownerInitials, onTab, onMenu, onNotification
           <Bell size={24} />
           {badge > 0 && <span>{badge}</span>}
         </button>
-        <button className="avatar-button" type="button">{ownerInitials}</button>
-        <ChevronDown className="desktop-only" size={20} />
+        <button
+          className="avatar-button"
+          type="button"
+          ref={acctRef}
+          onClick={() => setDdOpen((o) => !o)}
+          aria-label="Conta"
+        >{ownerInitials}</button>
+        <ChevronDown
+          className="desktop-only acct-chevron"
+          size={20}
+          onClick={() => setDdOpen((o) => !o)}
+        />
       </div>
+      {ddOpen && (
+        <AccountDropdown
+          initials={ownerInitials}
+          profileName={profileName}
+          email={email}
+          onEditAccount={onEditAccount}
+          onSignOut={onSignOut}
+          triggerRef={acctRef}
+          onClose={() => setDdOpen(false)}
+        />
+      )}
     </header>
   );
 }
@@ -857,15 +947,14 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
-function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
-  const [mode, setMode]         = useState('idle'); // 'idle' | 'editing' | 'changingPw'
-  const email                   = session?.user?.email || '';
-  const phone                   = session?.user?.user_metadata?.phone_number || '';
-  const initials                = (profileName || email || 'U')
-    .split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+/* ── Modal de edição da conta (dados + senha) ───────────────────── */
+function EditAccountModal({ session, profileName, onClose, onSaveProfile }) {
+  const email = session?.user?.email || '';
+  const phone = session?.user?.user_metadata?.phone_number || '';
+  const [tab, setTab] = useState('dados'); // 'dados' | 'senha'
 
-  // ── Editar perfil ──
-  const [editDraft, setEditDraft] = useState({ name: profileName || '', email, phone });
+  // ── Aba dados ──
+  const [editDraft, setEditDraft]   = useState({ name: profileName || '', email, phone });
   const [editStatus, setEditStatus] = useState('');
 
   async function handleSaveEdit() {
@@ -873,17 +962,15 @@ function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
     try {
       if (editDraft.name !== (profileName || '')) await onSaveProfile?.(editDraft.name);
       const authChanges = {};
-      if (editDraft.email !== email)   authChanges.email = editDraft.email;
-      if (editDraft.phone !== phone)   authChanges.phone = editDraft.phone;
-      if (authChanges.email || authChanges.phone !== undefined) await db.updateUserInfo(authChanges);
+      if (editDraft.email !== email) authChanges.email = editDraft.email;
+      if (editDraft.phone !== phone) authChanges.phone = editDraft.phone;
+      if (Object.keys(authChanges).length) await db.updateUserInfo(authChanges);
       setEditStatus('saved');
-      setTimeout(() => { setMode('idle'); setEditStatus(''); }, 1400);
+      setTimeout(() => onClose(), 1400);
     } catch (e) { setEditStatus('error:' + e.message); }
   }
 
-  function cancelEdit() { setEditDraft({ name: profileName || '', email, phone }); setMode('idle'); setEditStatus(''); }
-
-  // ── Alterar senha ──
+  // ── Aba senha ──
   const [pwDraft, setPwDraft]   = useState({ next: '', confirm: '' });
   const [pwStatus, setPwStatus] = useState('');
 
@@ -894,81 +981,83 @@ function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
     const { error } = await db.updatePassword(pwDraft.next);
     if (error) { setPwStatus(`error:${error.message}`); return; }
     setPwStatus('saved');
-    setTimeout(() => { setMode('idle'); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }, 1400);
+    setTimeout(() => onClose(), 1400);
   }
 
-  function cancelPw() { setMode('idle'); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }
+  return (
+    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card edit-account-modal">
+        <div className="sheet-handle" />
+        <button className="modal-close" type="button" onClick={onClose}><X size={20} /></button>
+        <h2>Editar conta</h2>
+
+        {/* Abas */}
+        <div className="edit-acct-tabs">
+          <button type="button" className={tab === 'dados' ? 'active' : ''} onClick={() => setTab('dados')}>Dados</button>
+          <button type="button" className={tab === 'senha' ? 'active' : ''} onClick={() => setTab('senha')}>Senha</button>
+        </div>
+
+        {tab === 'dados' && (
+          <div className="modal-form">
+            <Field label="Nome"     value={editDraft.name}  onChange={(v) => setEditDraft((d) => ({ ...d, name: v }))} />
+            <Field label="E-mail"   value={editDraft.email} onChange={(v) => setEditDraft((d) => ({ ...d, email: v }))} />
+            <Field label="Telefone" value={editDraft.phone} onChange={(v) => setEditDraft((d) => ({ ...d, phone: v }))} />
+            {editDraft.email !== email && (
+              <p className="account-msg info">Um e-mail de confirmação será enviado para o novo endereço.</p>
+            )}
+            {editStatus.startsWith('error:') && <p className="account-msg error">{editStatus.slice(6)}</p>}
+            {editStatus === 'saved'           && <p className="account-msg success">Dados atualizados!</p>}
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
+              <button className="primary" type="button" disabled={editStatus === 'saving'} onClick={handleSaveEdit}>
+                {editStatus === 'saving' ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'senha' && (
+          <div className="modal-form">
+            <Field label="Nova senha"           type="password" value={pwDraft.next}    onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
+            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm} onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
+            {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
+            {pwStatus === 'saved'           && <p className="account-msg success">Senha alterada com sucesso!</p>}
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
+              <button className="primary" type="button" disabled={pwStatus === 'saving'} onClick={handleSavePw}>
+                {pwStatus === 'saving' ? 'Salvando…' : 'Salvar senha'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Card "Minha conta" na aba Ajustes (simplificado) ───────────── */
+function AccountCard({ session, profileName, onSignOut, onEditAccount }) {
+  const email    = session?.user?.email || '';
+  const initials = (profileName || email || 'U').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <section className="settings-card account-card">
       <h1 className="account-card-title">Minha conta</h1>
-
-      {/* ── Cabeçalho: avatar + info + botão editar ── */}
       <div className="account-header">
         <span className="account-avatar">{initials}</span>
         <div className="account-info">
           <strong className="account-name">{profileName || 'Usuário'}</strong>
           <span className="account-email">{email}</span>
         </div>
-        {mode === 'idle' && (
-          <button className="ghost small account-edit-btn" type="button"
-            onClick={() => { setEditDraft({ name: profileName || '', email, phone }); setMode('editing'); }}>
-            <Settings size={15} /> Editar
-          </button>
-        )}
+        <button className="ghost small account-edit-btn" type="button" onClick={onEditAccount}>
+          <Settings size={15} /> Editar conta
+        </button>
       </div>
-
-      {/* ── Modo: editar dados ── */}
-      {mode === 'editing' && (
-        <div className="account-edit-form">
-          <div className="form-grid">
-            <Field label="Nome"     value={editDraft.name}  onChange={(v) => setEditDraft((d) => ({ ...d, name: v }))} />
-            <Field label="E-mail"   value={editDraft.email} onChange={(v) => setEditDraft((d) => ({ ...d, email: v }))} />
-            <Field label="Telefone" value={editDraft.phone} onChange={(v) => setEditDraft((d) => ({ ...d, phone: v }))} />
-          </div>
-          {editDraft.email !== email && (
-            <p className="account-msg info">Um e-mail de confirmação será enviado para o novo endereço.</p>
-          )}
-          {editStatus.startsWith('error:') && <p className="account-msg error">{editStatus.slice(6)}</p>}
-          {editStatus === 'saved'           && <p className="account-msg success">Dados atualizados!</p>}
-          <div className="account-actions">
-            <button className="ghost small" type="button" onClick={cancelEdit}>Cancelar</button>
-            <button className="primary small" type="button" disabled={editStatus === 'saving'} onClick={handleSaveEdit}>
-              {editStatus === 'saving' ? 'Salvando…' : 'Salvar'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modo: alterar senha ── */}
-      {mode === 'changingPw' && (
-        <div className="account-edit-form">
-          <div className="form-grid two">
-            <Field label="Nova senha"           type="password" value={pwDraft.next}     onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
-            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm}  onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
-          </div>
-          {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
-          {pwStatus === 'saved'           && <p className="account-msg success">Senha alterada com sucesso!</p>}
-          <div className="account-actions">
-            <button className="ghost small" type="button" onClick={cancelPw}>Cancelar</button>
-            <button className="primary small" type="button" disabled={pwStatus === 'saving'} onClick={handleSavePw}>
-              {pwStatus === 'saving' ? 'Salvando…' : 'Salvar senha'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Ações de baixo (apenas no idle) ── */}
-      {mode === 'idle' && (
-        <div className="account-actions">
-          <button className="ghost small account-action-btn" type="button" onClick={() => setMode('changingPw')}>
-            <Lock size={15} /> Alterar senha
-          </button>
-          <button className="danger-link account-signout" type="button" onClick={onSignOut}>
-            <LogOut size={15} /> Sair da conta
-          </button>
-        </div>
-      )}
+      <div className="account-actions">
+        <button className="danger-link account-signout" type="button" onClick={onSignOut}>
+          <LogOut size={15} /> Sair da conta
+        </button>
+      </div>
     </section>
   );
 }
@@ -979,7 +1068,7 @@ const THEMES = [
   { id: 'purple', label: 'Roxo'        },
 ];
 
-function SettingsPage({ session, card, profileName, notifications, theme = 'ocean', onTheme, onSignOut, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete }) {
+function SettingsPage({ session, card, profileName, notifications, theme = 'ocean', onTheme, onSignOut, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete, onEditAccount }) {
   const [draft, setDraft] = useState(card);
   const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -1051,7 +1140,7 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
       </div>
 
       {/* ── Minha conta ── */}
-      <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} onSaveProfile={onSaveProfile} />
+      <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} onEditAccount={onEditAccount} />
 
       {/* ── Ajustes do usuário ── */}
       <CollapsibleCard title="Ajustes do usuário" subtitle="Personalize sua experiência no DivideConta." defaultOpen={false}>
