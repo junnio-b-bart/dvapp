@@ -971,8 +971,19 @@ function EditAccountModal({ session, profileName, onClose, onSaveProfile }) {
   }
 
   // ── Aba senha ──
-  const [pwDraft, setPwDraft]   = useState({ next: '', confirm: '' });
+  // Etapas: 'verify' → usuário digita senha atual → 'change' → digita nova senha
+  const [pwStep, setPwStep]     = useState('verify'); // 'verify' | 'change'
+  const [pwDraft, setPwDraft]   = useState({ current: '', next: '', confirm: '' });
   const [pwStatus, setPwStatus] = useState('');
+
+  async function handleVerifyCurrent() {
+    if (!pwDraft.current) { setPwStatus('error:Digite sua senha atual'); return; }
+    setPwStatus('checking');
+    const { error } = await db.signIn(email, pwDraft.current);
+    if (error) { setPwStatus('error:Senha atual incorreta'); return; }
+    setPwStatus('');
+    setPwStep('change');
+  }
 
   async function handleSavePw() {
     if (pwDraft.next.length < 6)          { setPwStatus('error:Mínimo 6 caracteres'); return; }
@@ -994,7 +1005,8 @@ function EditAccountModal({ session, profileName, onClose, onSaveProfile }) {
         {/* Abas */}
         <div className="edit-acct-tabs">
           <button type="button" className={tab === 'dados' ? 'active' : ''} onClick={() => setTab('dados')}>Dados</button>
-          <button type="button" className={tab === 'senha' ? 'active' : ''} onClick={() => setTab('senha')}>Senha</button>
+          <button type="button" className={tab === 'senha' ? 'active' : ''}
+            onClick={() => { setTab('senha'); setPwStep('verify'); setPwDraft({ current: '', next: '', confirm: '' }); setPwStatus(''); }}>Senha</button>
         </div>
 
         {tab === 'dados' && (
@@ -1016,14 +1028,33 @@ function EditAccountModal({ session, profileName, onClose, onSaveProfile }) {
           </div>
         )}
 
-        {tab === 'senha' && (
+        {tab === 'senha' && pwStep === 'verify' && (
           <div className="modal-form">
-            <Field label="Nova senha"           type="password" value={pwDraft.next}    onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
-            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm} onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
+            <Field label="Senha atual" type="password" value={pwDraft.current}
+              onChange={(v) => { setPwDraft((d) => ({ ...d, current: v })); setPwStatus(''); }} />
+            {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
+              <button className="primary" type="button"
+                disabled={pwStatus === 'checking'}
+                onClick={handleVerifyCurrent}>
+                {pwStatus === 'checking' ? 'Verificando…' : 'Continuar'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'senha' && pwStep === 'change' && (
+          <div className="modal-form">
+            <Field label="Nova senha"           type="password" value={pwDraft.next}    onChange={(v) => { setPwDraft((d) => ({ ...d, next: v })); setPwStatus(''); }} />
+            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm} onChange={(v) => { setPwDraft((d) => ({ ...d, confirm: v })); setPwStatus(''); }} />
             {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
             {pwStatus === 'saved'           && <p className="account-msg success">Senha alterada com sucesso!</p>}
             <div className="modal-actions">
-              <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
+              <button className="ghost" type="button"
+                onClick={() => { setPwStep('verify'); setPwDraft((d) => ({ ...d, next: '', confirm: '' })); setPwStatus(''); }}>
+                Voltar
+              </button>
               <button className="primary" type="button" disabled={pwStatus === 'saving'} onClick={handleSavePw}>
                 {pwStatus === 'saving' ? 'Salvando…' : 'Salvar senha'}
               </button>
