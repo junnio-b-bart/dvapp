@@ -392,10 +392,18 @@ function App({ session }) {
         for (const file of files) await db.uploadInvoiceFile(userId, selectedCard.id, file);
       }
 
+      // Recarrega todos os itens do banco para garantir que itens manuais
+      // (preservados pelo replaceInvoiceItems) também apareçam na tela.
+      let allItems = nextItems;
+      if (invoiceId) {
+        const { data: dbItems } = await db.getItemsByInvoice(invoiceId);
+        if (dbItems?.length) allItems = sortInvoiceItems(dbItems);
+      }
+
       setState((prev) => ({
         ...prev,
         activeTab: 'faturas',
-        itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: nextItems },
+        itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: allItems },
         invoiceIdByCard: { ...prev.invoiceIdByCard, ...(invoiceId ? { [selectedCard.id]: invoiceId } : {}) },
       }));
       setModal(null);
