@@ -1270,8 +1270,8 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => updateDraft({ name })} />
           <Field label="Finais do cartão" value={draft.last4} onChange={(last4) => updateDraft({ last4 })} />
           <Field label="Titular do cartão" value={draft.owner} onChange={(owner) => updateDraft({ owner })} />
-          <Field label="Data de fechamento" icon={CalendarDays} value={draft.closeDate} onChange={(closeDate) => updateDraft({ closeDate })} />
-          <Field label="Data de vencimento no" icon={CalendarDays} value={draft.dueDate} onChange={(dueDate) => updateDraft({ dueDate })} />
+          <DatePickerField label="Data de fechamento" value={draft.closeDate} onChange={(closeDate) => updateDraft({ closeDate })} />
+          <DatePickerField label="Data de vencimento no" value={draft.dueDate} onChange={(dueDate) => updateDraft({ dueDate })} />
         </div>
         <BankChips value={draft.bank} onChange={(bank) => updateDraft({ bank })} />
         <BrandChips value={draft.brand} onChange={(brand) => updateDraft({ brand })} />
@@ -1896,8 +1896,8 @@ function CardModal({ onClose, onSave }) {
           <Field label="Nome do cartão" value={draft.name} onChange={(name) => setDraft({ ...draft, name })} />
           <Field label="Finais do cartão" value={draft.last4} onChange={(last4) => setDraft({ ...draft, last4 })} />
           <Field label="Dono / referência" value={draft.owner} onChange={(owner) => setDraft({ ...draft, owner })} />
-          <Field label="Data de fechamento" icon={CalendarDays} value={draft.closeDate} onChange={(closeDate) => setDraft({ ...draft, closeDate })} />
-          <Field label="Data de vencimento" icon={CalendarDays} value={draft.dueDate} onChange={(dueDate) => setDraft({ ...draft, dueDate })} />
+          <DatePickerField label="Data de fechamento" value={draft.closeDate} onChange={(closeDate) => setDraft({ ...draft, closeDate })} />
+          <DatePickerField label="Data de vencimento" value={draft.dueDate} onChange={(dueDate) => setDraft({ ...draft, dueDate })} />
         </div>
         <BankChips value={draft.bank} onChange={(bank) => setDraft({ ...draft, bank })} />
         <BrandChips value={draft.brand} onChange={(brand) => setDraft({ ...draft, brand })} />
