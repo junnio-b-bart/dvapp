@@ -493,6 +493,10 @@
 .status-pill.pill-empty    { background: #f1f4f8; color: #6a7789; }
 
 /* ── AccountCard ───────────────────────────────────────────────── */
+/* ── Campo de moeda (máscara ATM) ──────────────────────────────── */
+.currency-field-wrap { cursor: text; }
+.currency-field-wrap input { font-weight: 700; letter-spacing: 0.01em; color: var(--navy); }
+
 .account-card-title { margin: 0 0 20px; font-size: 22px; font-weight: 800; color: var(--navy); }
 .account-header {
   display: flex; align-items: center; gap: 16px;

@@ -1282,6 +1282,72 @@ function SummaryBar({ icon: Icon, count, countSuffix, label, totalLabel, total, 
 }
 
 
+/* ── Máscara de moeda estilo ATM ─────────────────────────────────
+   value  : número float (ex: 3.5 → exibe "R$ 3,50")
+   onChange: recebe float atualizado
+   Dígitos empurram da direita; Backspace puxa de volta; Delete zera. */
+function CurrencyField({ label, value, onChange }) {
+  const [cents, setCents] = useState(() => Math.round(Number(value || 0) * 100));
+
+  function fmt(c) {
+    const n = Math.max(0, Math.floor(c));
+    const s = String(n).padStart(3, '0');
+    const dec = s.slice(-2);
+    const int = parseInt(s.slice(0, -2), 10).toLocaleString('pt-BR');
+    return `R$ ${int},${dec}`;
+  }
+
+  function commit(next) {
+    const v = Math.min(Math.max(0, next), 99999999); // max R$ 999.999,99
+    setCents(v);
+    onChange(v / 100);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key >= '0' && e.key <= '9') {
+      e.preventDefault();
+      commit(cents * 10 + parseInt(e.key, 10));
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      commit(Math.floor(cents / 10));
+    } else if (e.key === 'Delete') {
+      e.preventDefault();
+      commit(0);
+    }
+    // Tab, setas etc. passam normalmente
+  }
+
+  // Fallback para teclado virtual mobile (onKeyDown pode não disparar)
+  function handleChange(e) {
+    const digits = e.target.value.replace(/\D/g, '');
+    commit(Math.min(parseInt(digits || '0', 10), 99999999));
+  }
+
+  // Paste: extrai dígitos e assume os últimos 2 como centavos
+  function handlePaste(e) {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text');
+    const digits = text.replace(/\D/g, '');
+    commit(Math.min(parseInt(digits || '0', 10), 99999999));
+  }
+
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <i className="currency-field-wrap">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={fmt(cents)}
+          onKeyDown={handleKeyDown}
+          onChange={handleChange}
+          onPaste={handlePaste}
+        />
+      </i>
+    </label>
+  );
+}
+
 function Field({ label, value, onChange, icon: Icon, type = 'text' }) {
   const [showPassword, setShowPassword] = useState(false);
   const inputType = type === 'password' ? (showPassword ? 'text' : 'password') : type;
@@ -1502,10 +1568,7 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
   const [parcelado, setParcelado] = useState(row?.installment && row.installment !== '-');
   const [draft, setDraft] = useState(row || item(`m-${Date.now()}`, getTodayFormatted(), '', '-', 0, true, true));
 
-  // Estado de texto separado para o campo Valor — evita NaN ao reeditar valor formatado
-  const [amountText, setAmountText] = useState(() =>
-    row?.amount && Number(row.amount) !== 0 ? amountOnly(row.amount) : ''
-  );
+  // amount é controlado pelo CurrencyField diretamente no draft
 
   // Total de parcelas (selecionado via pills; parseia do row existente se estiver editando)
   const [totalInstallments, setTotalInstallments] = useState(() => {
@@ -1517,20 +1580,6 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
     if (!row?.installment || row.installment === '-') return false;
     return (parseInt(row.installment.split('/')[1]) || 0) > 12;
   });
-
-  function handleAmountChange(raw) {
-    setAmountText(raw);
-    // Aceita "75,50" | "75.50" | "1.624,03" (formato BR com separador de milhar)
-    const c = raw.replace(/[^\d,.]/g, '');
-    let n;
-    if (c.includes('.') && c.includes(',')) {
-      // formato BR completo: ponto = milhar, vírgula = decimal
-      n = parseFloat(c.replace(/\./g, '').replace(',', '.'));
-    } else {
-      n = parseFloat(c.replace(',', '.'));
-    }
-    setDraft((prev) => ({ ...prev, amount: isNaN(n) ? 0 : n }));
-  }
 
   const currentInstallment = computeCurrentInstallment(draft.date, totalInstallments);
 
@@ -1546,7 +1595,7 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
       >
         <div className="form-grid two">
           <Field label="Descrição da compra" value={draft.description} onChange={(description) => setDraft({ ...draft, description })} />
-          <Field label="Valor da compra" value={amountText} onChange={handleAmountChange} />
+          <CurrencyField label="Valor da compra" value={draft.amount} onChange={(v) => setDraft((d) => ({ ...d, amount: v }))} />
           <label className="field span-two"><span>Cartão</span><i><BankBadge bank={card.bank} /><input value={`${card.name}  •••• ${card.last4}`} readOnly /></i></label>
           <Field label="Data da compra" icon={CalendarDays} value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
         </div>
