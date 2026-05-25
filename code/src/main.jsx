@@ -1054,7 +1054,7 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
       <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} onSaveProfile={onSaveProfile} />
 
       {/* ── Ajustes do usuário ── */}
-      <CollapsibleCard title="Ajustes do usuário" subtitle="Personalize sua experiência no DivideConta." defaultOpen={true}>
+      <CollapsibleCard title="Ajustes do usuário" subtitle="Personalize sua experiência no DivideConta." defaultOpen={false}>
         <Field
           label="Nome do usuário"
           value={profileDraft}
