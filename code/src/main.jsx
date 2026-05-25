@@ -1907,15 +1907,35 @@ function CardModal({ onClose, onSave }) {
   );
 }
 
-// Calcula a parcela atual com base na diferença de meses entre a data da compra e hoje
-function computeCurrentInstallment(dateStr, total) {
+// Calcula a parcela atual levando em conta o dia de fechamento do cartão.
+// Regra: se o dia da compra >= dia de fechamento, a compra cai na fatura do MÊS SEGUINTE.
+// Parcela = (mês da fatura atual) - (mês da fatura da compra) + 1
+function computeCurrentInstallment(dateStr, total, closingDay = 1) {
   if (!dateStr || !total) return 1;
   const parts = dateStr.split('/');
   if (parts.length !== 3) return 1;
-  const purchase = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
-  const today = new Date();
-  const elapsed = (today.getFullYear() - purchase.getFullYear()) * 12
-    + (today.getMonth() - purchase.getMonth());
+
+  const [pd, pm, py] = parts.map(Number);
+  const today  = new Date();
+  const td = today.getDate();
+  const tm = today.getMonth() + 1; // 1-based
+  const ty = today.getFullYear();
+
+  // Mês de fatura da compra
+  // Se o dia da compra >= fechamento, cai na fatura do mês seguinte
+  let pim = pm, piy = py;
+  if (pd >= closingDay) {
+    pim += 1;
+    if (pim > 12) { pim = 1; piy += 1; }
+  }
+
+  // Mês de fatura atual
+  // Se hoje >= fechamento, a fatura deste mês está fechando/fechada agora
+  // → fatura atual = este mês. Se hoje < fechamento, ainda estamos na fatura deste mês também.
+  // Em ambos os casos o mês de fatura atual é simplesmente o mês corrente.
+  const cim = tm, ciy = ty;
+
+  const elapsed = (ciy - piy) * 12 + (cim - pim);
   return Math.min(Math.max(1, elapsed + 1), total);
 }
 
@@ -1937,7 +1957,9 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
     return (parseInt(row.installment.split('/')[1]) || 0) > 12;
   });
 
-  const currentInstallment = computeCurrentInstallment(draft.date, totalInstallments);
+  // Extrai o DIA de fechamento do cartão (closeDate está em DD/MM/AAAA)
+  const closingDay = parseInt((card.close_date || card.closeDate || '').split('/')[0]) || 1;
+  const currentInstallment = computeCurrentInstallment(draft.date, totalInstallments, closingDay);
 
   return (
     <ModalShell title={title} onClose={onClose}>
