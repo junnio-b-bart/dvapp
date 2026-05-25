@@ -856,44 +856,94 @@ function CollapsibleCard({ title, subtitle, children, defaultOpen = true }) {
   );
 }
 
-function AccountCard({ session, profileName, onSignOut }) {
-  const [changingPw, setChangingPw] = useState(false);
-  const [pwDraft, setPwDraft]       = useState({ next: '', confirm: '' });
-  const [pwStatus, setPwStatus]     = useState(''); // '' | 'saving' | 'saved' | 'error:...'
-
-  const email    = session?.user?.email || '';
-  const initials = (profileName || email || 'U')
+function AccountCard({ session, profileName, onSignOut, onSaveProfile }) {
+  const [mode, setMode]         = useState('idle'); // 'idle' | 'editing' | 'changingPw'
+  const email                   = session?.user?.email || '';
+  const phone                   = session?.user?.user_metadata?.phone_number || '';
+  const initials                = (profileName || email || 'U')
     .split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
+  // ── Editar perfil ──
+  const [editDraft, setEditDraft] = useState({ name: profileName || '', email, phone });
+  const [editStatus, setEditStatus] = useState('');
+
+  async function handleSaveEdit() {
+    setEditStatus('saving');
+    try {
+      if (editDraft.name !== (profileName || '')) await onSaveProfile?.(editDraft.name);
+      const authChanges = {};
+      if (editDraft.email !== email)   authChanges.email = editDraft.email;
+      if (editDraft.phone !== phone)   authChanges.phone = editDraft.phone;
+      if (authChanges.email || authChanges.phone !== undefined) await db.updateUserInfo(authChanges);
+      setEditStatus('saved');
+      setTimeout(() => { setMode('idle'); setEditStatus(''); }, 1400);
+    } catch (e) { setEditStatus('error:' + e.message); }
+  }
+
+  function cancelEdit() { setEditDraft({ name: profileName || '', email, phone }); setMode('idle'); setEditStatus(''); }
+
+  // ── Alterar senha ──
+  const [pwDraft, setPwDraft]   = useState({ next: '', confirm: '' });
+  const [pwStatus, setPwStatus] = useState('');
+
   async function handleSavePw() {
-    if (pwDraft.next.length < 6)             { setPwStatus('error:Mínimo 6 caracteres'); return; }
-    if (pwDraft.next !== pwDraft.confirm)    { setPwStatus('error:As senhas não coincidem'); return; }
+    if (pwDraft.next.length < 6)          { setPwStatus('error:Mínimo 6 caracteres'); return; }
+    if (pwDraft.next !== pwDraft.confirm) { setPwStatus('error:As senhas não coincidem'); return; }
     setPwStatus('saving');
     const { error } = await db.updatePassword(pwDraft.next);
     if (error) { setPwStatus(`error:${error.message}`); return; }
     setPwStatus('saved');
-    setTimeout(() => { setChangingPw(false); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }, 1400);
+    setTimeout(() => { setMode('idle'); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }, 1400);
   }
 
-  function cancelPw() { setChangingPw(false); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }
+  function cancelPw() { setMode('idle'); setPwDraft({ next: '', confirm: '' }); setPwStatus(''); }
 
   return (
-    <CollapsibleCard title="Minha conta" subtitle={email} defaultOpen={true}>
-      {/* ── Cabeçalho com avatar ── */}
+    <CollapsibleCard title="Minha conta" defaultOpen={true}>
+
+      {/* ── Cabeçalho: avatar + info + botão editar ── */}
       <div className="account-header">
         <span className="account-avatar">{initials}</span>
-        <div>
+        <div className="account-info">
           <strong className="account-name">{profileName || 'Usuário'}</strong>
           <span className="account-email">{email}</span>
         </div>
+        {mode === 'idle' && (
+          <button className="ghost small account-edit-btn" type="button"
+            onClick={() => { setEditDraft({ name: profileName || '', email, phone }); setMode('editing'); }}>
+            <Pencil size={14} /> Editar
+          </button>
+        )}
       </div>
 
-      {/* ── Trocar senha ── */}
-      {changingPw ? (
-        <div className="account-pw-form">
+      {/* ── Modo: editar dados ── */}
+      {mode === 'editing' && (
+        <div className="account-edit-form">
+          <div className="form-grid">
+            <Field label="Nome"     value={editDraft.name}  onChange={(v) => setEditDraft((d) => ({ ...d, name: v }))} />
+            <Field label="E-mail"   value={editDraft.email} onChange={(v) => setEditDraft((d) => ({ ...d, email: v }))} />
+            <Field label="Telefone" value={editDraft.phone} onChange={(v) => setEditDraft((d) => ({ ...d, phone: v }))} />
+          </div>
+          {editDraft.email !== email && (
+            <p className="account-msg info">Um e-mail de confirmação será enviado para o novo endereço.</p>
+          )}
+          {editStatus.startsWith('error:') && <p className="account-msg error">{editStatus.slice(6)}</p>}
+          {editStatus === 'saved'           && <p className="account-msg success">Dados atualizados!</p>}
+          <div className="account-actions">
+            <button className="ghost small" type="button" onClick={cancelEdit}>Cancelar</button>
+            <button className="primary small" type="button" disabled={editStatus === 'saving'} onClick={handleSaveEdit}>
+              {editStatus === 'saving' ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modo: alterar senha ── */}
+      {mode === 'changingPw' && (
+        <div className="account-edit-form">
           <div className="form-grid two">
-            <Field label="Nova senha"        type="password" value={pwDraft.next}     onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
-            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm} onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
+            <Field label="Nova senha"           type="password" value={pwDraft.next}     onChange={(v) => setPwDraft((d) => ({ ...d, next: v }))} />
+            <Field label="Confirmar nova senha" type="password" value={pwDraft.confirm}  onChange={(v) => setPwDraft((d) => ({ ...d, confirm: v }))} />
           </div>
           {pwStatus.startsWith('error:') && <p className="account-msg error">{pwStatus.slice(6)}</p>}
           {pwStatus === 'saved'           && <p className="account-msg success">Senha alterada com sucesso!</p>}
@@ -904,9 +954,12 @@ function AccountCard({ session, profileName, onSignOut }) {
             </button>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* ── Ações de baixo (apenas no idle) ── */}
+      {mode === 'idle' && (
         <div className="account-actions">
-          <button className="ghost small account-action-btn" type="button" onClick={() => setChangingPw(true)}>
+          <button className="ghost small account-action-btn" type="button" onClick={() => setMode('changingPw')}>
             <Lock size={15} /> Alterar senha
           </button>
           <button className="danger-link account-signout" type="button" onClick={onSignOut}>
@@ -996,12 +1049,12 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
       </div>
 
       {/* ── Minha conta ── */}
-      <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} />
+      <AccountCard session={session} profileName={profileName} onSignOut={onSignOut} onSaveProfile={onSaveProfile} />
 
-      {/* ── Ajustes do app ── (primeiro, expandido por padrão) */}
-      <CollapsibleCard title="Ajustes do app" subtitle="Personalize sua experiência no DivideConta." defaultOpen={true}>
+      {/* ── Ajustes do usuário ── */}
+      <CollapsibleCard title="Ajustes do usuário" subtitle="Personalize sua experiência no DivideConta." defaultOpen={true}>
         <Field
-          label="Seu nome no app"
+          label="Nome do usuário"
           value={profileDraft}
           onChange={setProfileDraft}
         />

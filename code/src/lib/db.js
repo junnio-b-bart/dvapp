@@ -32,6 +32,13 @@ export async function updatePassword(newPassword) {
   return supabase.auth.updateUser({ password: newPassword });
 }
 
+export async function updateUserInfo({ email, phone }) {
+  const payload = {};
+  if (email) payload.email = email;
+  if (phone !== undefined) payload.data = { phone_number: phone };
+  return supabase.auth.updateUser(payload);
+}
+
 export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }

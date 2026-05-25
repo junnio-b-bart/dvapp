@@ -505,17 +505,20 @@
   background: linear-gradient(135deg, var(--teal), var(--teal-dark));
   color: #fff; font-weight: 800; font-size: 18px;
 }
-.account-name  { display: block; font-size: 16px; font-weight: 700; color: var(--navy); }
-.account-email { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.account-info   { flex: 1; min-width: 0; }
+.account-name   { display: block; font-size: 16px; font-weight: 700; color: var(--navy); }
+.account-email  { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.account-edit-btn { flex-shrink: 0; min-width: 0; }
 .account-actions {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
 .account-action-btn { min-width: 0; }
 .account-signout    { margin-left: auto; }
-.account-pw-form    { display: grid; gap: 14px; }
-.account-msg        { margin: 0; font-size: 13px; font-weight: 600; }
-.account-msg.error  { color: var(--red); }
-.account-msg.success{ color: var(--green); }
+.account-edit-form  { display: grid; gap: 14px; }
+.account-msg         { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.account-msg.error   { color: var(--red); }
+.account-msg.success { color: var(--green); }
+.account-msg.info    { color: #2563eb; }
 
 /* ── Autosave indicator ────────────────────────────────────────── */
 .autosave-status {
