@@ -685,11 +685,13 @@ function Topbar({ activeTab, badge, ownerInitials, profileName, session, onTab, 
   );
 }
 
+const BASE = import.meta.env.BASE_URL;
+
 function Logo() {
   return (
     <button className="logo" type="button" aria-label="DivideConta">
-      <img src="/logofull.png" alt="DivideConta" className="logo-full-img" />
-      <img src="/logoicon.png" alt="DivideConta" className="logo-icon-img" />
+      <img src={`${BASE}logofull.png`} alt="DivideConta" className="logo-full-img" />
+      <img src={`${BASE}logoicon.png`} alt="DivideConta" className="logo-icon-img" />
     </button>
   );
 }
