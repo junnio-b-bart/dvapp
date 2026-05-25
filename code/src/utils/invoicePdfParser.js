@@ -158,17 +158,8 @@ function parseDayStartInLine(line) {
 }
 
 function parseDateInLine(line, invoiceMonthIndex, invoiceYear) {
-  const ddMmMatch = line.match(DATE_DDMM_RE);
-  if (ddMmMatch) {
-    const day = Number(ddMmMatch[1]);
-    const monthIndex = Number(ddMmMatch[2]) - 1;
-    const yearToken = ddMmMatch[3];
-    const date = buildSafeDate(day, monthIndex, yearToken, invoiceMonthIndex, invoiceYear);
-    if (date) {
-      return { date, token: ddMmMatch[0] };
-    }
-  }
-
+  // Verifica PRIMEIRO o formato "16 ABR" (dia + nome do mês) — é inequívoco
+  // e evita que padrões como "2/3" (parcelas) sejam capturados como datas.
   const ddMonMatch = line.match(DATE_DD_MON_RE);
   if (ddMonMatch) {
     const day = Number(ddMonMatch[1]);
@@ -180,6 +171,18 @@ function parseDateInLine(line, invoiceMonthIndex, invoiceYear) {
       if (date) {
         return { date, token: ddMonMatch[0] };
       }
+    }
+  }
+
+  // Só tenta formato numérico "16/04" se não encontrou formato com nome de mês
+  const ddMmMatch = line.match(DATE_DDMM_RE);
+  if (ddMmMatch) {
+    const day = Number(ddMmMatch[1]);
+    const monthIndex = Number(ddMmMatch[2]) - 1;
+    const yearToken = ddMmMatch[3];
+    const date = buildSafeDate(day, monthIndex, yearToken, invoiceMonthIndex, invoiceYear);
+    if (date) {
+      return { date, token: ddMmMatch[0] };
     }
   }
 
