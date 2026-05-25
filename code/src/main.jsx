@@ -1378,11 +1378,12 @@ function DatePickerField({ label, value, onChange }) {
   function openPicker() {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const pickerH = 320;
+    const PW = 240; // largura fixa do popup
+    const pickerH = 260;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top  = spaceBelow >= pickerH + 8 ? rect.bottom + 4 : rect.top - pickerH - 4;
-    const left = Math.min(rect.left, window.innerWidth - 292);
-    setPopStyle({ top, left, width: Math.max(rect.width, 280) });
+    const left = Math.min(rect.left, window.innerWidth - PW - 8);
+    setPopStyle({ top, left, width: PW });
     const p = parseValue(value);
     setCursor({ month: p.month, year: p.year });
     setView('days');
