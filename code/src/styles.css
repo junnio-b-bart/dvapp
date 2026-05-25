@@ -763,6 +763,70 @@
 
 }
 
+/* ── Seletor de parcela atual no ItemModal ──────────────────────── */
+.installment-current-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.installment-current-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.installment-auto-reset {
+  border: none;
+  background: none;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+.installment-auto-reset:hover { text-decoration: underline; }
+
+/* Destaque sutil na pill auto-calculada */
+.pill-auto { box-shadow: 0 0 0 2px var(--teal); }
+
+.installment-auto-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Stepper para parcelas > 12 */
+.installment-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.installment-stepper button {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 18px;
+  color: var(--navy);
+  cursor: pointer;
+}
+.installment-stepper button:hover { background: #f1f5f9; }
+.installment-stepper span {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.installment-stepper small { font-weight: 400; color: var(--muted); }
+
 /* ── AccountDropdown (mini-popup da topbar) ─────────────────────── */
 .acct-chevron { cursor: pointer; color: #fff; opacity: .85; }
 .acct-dropdown {

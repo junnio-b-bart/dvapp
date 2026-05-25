@@ -1959,7 +1959,18 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
 
   // Extrai o DIA de fechamento do cartão (closeDate está em DD/MM/AAAA)
   const closingDay = parseInt((card.close_date || card.closeDate || '').split('/')[0]) || 1;
-  const currentInstallment = computeCurrentInstallment(draft.date, totalInstallments, closingDay);
+  const autoInstallment = computeCurrentInstallment(draft.date, totalInstallments, closingDay);
+
+  // Override manual da parcela atual (null = usa o cálculo automático)
+  const [installmentOverride, setInstallmentOverride] = useState(() => {
+    if (!row?.installment || row.installment === '-') return null;
+    const stored = parseInt(row.installment.split('/')[0]) || null;
+    return stored;
+  });
+  // Ao mudar o total, garante que o override não ultrapasse o novo total
+  const currentInstallment = installmentOverride !== null
+    ? Math.min(installmentOverride, totalInstallments)
+    : autoInstallment;
 
   return (
     <ModalShell title={title} onClose={onClose}>
@@ -2018,10 +2029,39 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
               />
             )}
 
-            {/* Prévia da parcela calculada automaticamente */}
-            <div className="info-strip">
-              <Info size={17} />
-              Parcela atual calculada automaticamente: <strong>{currentInstallment} de {totalInstallments}</strong>
+            {/* Seletor da parcela atual */}
+            <div className="installment-current-block">
+              <div className="installment-current-head">
+                <span className="installment-pills-label">Qual parcela está sendo paga?</span>
+                {installmentOverride !== null && (
+                  <button type="button" className="installment-auto-reset"
+                    onClick={() => setInstallmentOverride(null)}>
+                    Usar automático
+                  </button>
+                )}
+              </div>
+              {totalInstallments <= 12 ? (
+                <div className="installment-pills">
+                  {Array.from({ length: totalInstallments }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`pill-num${currentInstallment === n ? ' active' : ''}${n === autoInstallment && installmentOverride === null ? ' pill-auto' : ''}`}
+                      onClick={() => setInstallmentOverride(n === autoInstallment ? null : n)}
+                      title={n === autoInstallment ? 'Calculado automaticamente' : ''}
+                    >{n}</button>
+                  ))}
+                </div>
+              ) : (
+                <div className="installment-stepper">
+                  <button type="button" onClick={() => setInstallmentOverride(Math.max(1, currentInstallment - 1))}>−</button>
+                  <span>{currentInstallment} <small>de {totalInstallments}</small></span>
+                  <button type="button" onClick={() => setInstallmentOverride(Math.min(totalInstallments, currentInstallment + 1))}>+</button>
+                </div>
+              )}
+              {installmentOverride === null && (
+                <p className="installment-auto-note"><Info size={13} /> Calculada automaticamente pela data da compra</p>
+              )}
             </div>
           </div>
         )}
