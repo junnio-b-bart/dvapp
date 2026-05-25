@@ -1079,3 +1079,40 @@
 }
 .dp-year:hover:not(.selected) { background: #f1f5f9; }
 .dp-year.selected { background: var(--teal); color: #fff; font-weight: 700; }
+
+/* ── Upload: toggle Adicionar / Substituir ──────────────────────── */
+.upload-mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 4px;
+  border-radius: 11px;
+  background: #f1f5f9;
+}
+.upload-mode-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, color .12s, box-shadow .12s;
+}
+.upload-mode-btn.active {
+  background: #fff;
+  color: var(--navy);
+  box-shadow: 0 1px 4px rgba(6,26,51,.10);
+}
+.upload-mode-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}

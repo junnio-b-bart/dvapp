@@ -27,6 +27,8 @@ import {
   Menu,
   Pencil,
   Plus,
+  PlusCircle,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -347,7 +349,7 @@ function App({ session }) {
     setModal(null);
   }
 
-  async function processUpload(files) {
+  async function processUpload(files, mode = 'replace') {
     if (!files.length) { setUploadError('Selecione um PDF ou imagens da fatura.'); return; }
     setUploading(true); setUploadError(''); setUploadProgress('Preparando arquivos...');
     try {
@@ -388,7 +390,24 @@ function App({ session }) {
         invoiceId = inv?.id;
       }
       if (invoiceId) {
-        await db.replaceInvoiceItems(invoiceId, selectedCard.id, userId, nextItems);
+        if (mode === 'append') {
+          // Adiciona sem apagar nada — apenas insere os novos itens do PDF
+          const rows = nextItems.map((item) => ({
+            invoice_id: invoiceId,
+            card_id: selectedCard.id,
+            user_id: userId,
+            date: item.date,
+            description: item.description,
+            installment: item.installment || '-',
+            amount: Number(item.amount) || 0,
+            mine: Boolean(item.mine),
+            manual: false,
+          }));
+          await db.insertItems(rows);
+        } else {
+          // Substitui itens importados anteriormente (preserva manuais)
+          await db.replaceInvoiceItems(invoiceId, selectedCard.id, userId, nextItems);
+        }
         for (const file of files) await db.uploadInvoiceFile(userId, selectedCard.id, file);
       }
 
@@ -2092,6 +2111,7 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
 
 function UploadModal({ card, uploading, progress, error, onClose, onUpload }) {
   const [files, setFiles] = useState([]);
+  const [mode, setMode] = useState('append');
   const fileLabel = files.length ? `${files.length} arquivo(s) selecionado(s)` : 'PDF, JPG, JPEG ou PNG';
   return (
     <ModalShell title="Subir fatura" onClose={onClose}>
@@ -2109,11 +2129,34 @@ function UploadModal({ card, uploading, progress, error, onClose, onUpload }) {
         </div>
         <small>{fileLabel}<br />Formatos aceitos: PDF, JPG, JPEG, PNG. Tamanho máximo: 20 MB por arquivo.</small>
       </label>
+
+      <div className="upload-mode-toggle">
+        <button
+          type="button"
+          className={`upload-mode-btn${mode === 'append' ? ' active' : ''}`}
+          onClick={() => setMode('append')}
+        >
+          <PlusCircle size={16} /> Adicionar à fatura
+        </button>
+        <button
+          type="button"
+          className={`upload-mode-btn${mode === 'replace' ? ' active' : ''}`}
+          onClick={() => setMode('replace')}
+        >
+          <RefreshCw size={16} /> Substituir importados
+        </button>
+      </div>
+      <p className="upload-mode-hint">
+        {mode === 'append'
+          ? 'Os lançamentos do PDF serão somados aos que já estão na fatura.'
+          : 'Os lançamentos importados anteriormente serão substituídos. Itens adicionados manualmente são preservados.'}
+      </p>
+
       {progress && <div className="upload-progress">{progress}</div>}
       {error && <div className="upload-error">{error}</div>}
       <div className="modal-actions">
         <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
-        <button className="primary" type="button" disabled={uploading} onClick={() => onUpload(files)}>
+        <button className="primary" type="button" disabled={uploading} onClick={() => onUpload(files, mode)}>
           {uploading ? 'Analisando...' : 'Processar fatura'} <ChevronRight size={22} />
         </button>
       </div>
