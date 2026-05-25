@@ -2066,12 +2066,10 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
           </div>
         )}
 
-        {row && (
-          <label className="mine-switch">
-            <input type="checkbox" checked={draft.mine} onChange={(event) => setDraft({ ...draft, mine: event.target.checked })} />
-            Este item é meu
-          </label>
-        )}
+        <label className="mine-switch">
+          <input type="checkbox" checked={draft.mine} onChange={(event) => setDraft({ ...draft, mine: event.target.checked })} />
+          Este item é meu
+        </label>
         <div className="modal-actions">
           {onDelete && <button className="danger-link" type="button" onClick={() => onDelete(row.id)}><Trash2 size={18} />Excluir item</button>}
           <button className="ghost" type="button" onClick={onClose}>Cancelar</button>
