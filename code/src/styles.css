@@ -43,7 +43,7 @@
 
 /* ── Logo imagens ───────────────────────────────────────────── */
 /* Desktop: mostra logo completa, esconde só ícone */
-.logo-full-img  { height: 38px; width: auto; display: block; object-fit: contain; }
+.logo-full-img  { height: 60px; width: auto; display: block; object-fit: contain; }
 .logo-icon-img  { display: none; }
 
 /* Mobile: esconde logo completa, mostra só ícone */
