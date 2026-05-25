@@ -1160,6 +1160,7 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
   const [draft, setDraft] = useState(card);
   const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const notifRef = useRef(null);
   const savedCardRef    = useRef(card);
   const savedProfileRef = useRef(profileName || '');
 
@@ -1203,6 +1204,15 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
     }, 800);
     return () => clearTimeout(timer);
   }, [profileDraft]);
+
+  // Scroll para a seção de Notificações quando ativado via engrenagem do balão
+  useEffect(() => {
+    if (!focusNotif) return;
+    const timer = setTimeout(() => {
+      notifRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80); // aguarda a expansão do card
+    return () => clearTimeout(timer);
+  }, [focusNotif]);
 
   if (!card) return null;
 
@@ -1271,9 +1281,11 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
       </CollapsibleCard>
 
       {/* ── Notificações ── */}
-      <CollapsibleCard key={`notif-${focusNotif}`} title="Notificações" subtitle="Gerencie os alertas que você deseja receber." defaultOpen={focusNotif > 0}>
-        <NotificationPanel values={notifications} onChange={handleNotifChange} />
-      </CollapsibleCard>
+      <div ref={notifRef}>
+        <CollapsibleCard key={`notif-${focusNotif}`} title="Notificações" subtitle="Gerencie os alertas que você deseja receber." defaultOpen={focusNotif > 0}>
+          <NotificationPanel values={notifications} onChange={handleNotifChange} />
+        </CollapsibleCard>
+      </div>
     </div>
   );
 }
