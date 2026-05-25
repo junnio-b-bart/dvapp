@@ -433,7 +433,7 @@ function App({ session }) {
         session={session}
         onTab={setTab}
         onMenu={() => update({ drawerOpen: true })}
-        onNotifications={() => setModal('notifications')}
+        onNotifSettings={() => { setTab('ajustes'); update({ focusNotif: (state.focusNotif || 0) + 1 }); }}
         onSignOut={db.signOut}
         onEditAccount={() => setModal('edit-account')}
       />
@@ -499,6 +499,7 @@ function App({ session }) {
                   onSaveNotifications={(notifications) => db.upsertNotificationSettings(userId, notifications)}
                   onDelete={() => setModal('delete-card')}
                   onEditAccount={() => setModal('edit-account')}
+                  focusNotif={state.focusNotif || 0}
                 />
               )}
             </>
@@ -580,9 +581,56 @@ function AccountDropdown({ initials, profileName, email, onEditAccount, onSignOu
   );
 }
 
-function Topbar({ activeTab, badge, ownerInitials, profileName, session, onTab, onMenu, onNotifications, onSignOut, onEditAccount }) {
-  const [ddOpen, setDdOpen] = useState(false);
-  const acctRef = useRef(null);
+/* Balão de notificações (portal) */
+function NotifDropdown({ badge, triggerRef, onClose, onSettings }) {
+  const popRef = useRef(null);
+  const [style, setStyle] = useState({});
+
+  useEffect(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const W = 270;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - W - 8));
+    setStyle({ top: rect.bottom + 8, left, width: W });
+  }, []);
+
+  useEffect(() => {
+    function close(e) {
+      if (popRef.current && !popRef.current.contains(e.target) && !triggerRef.current?.contains(e.target))
+        onClose();
+    }
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('mousedown', close, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', close, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, []);
+
+  return createPortal(
+    <div className="notif-dropdown" ref={popRef} style={style}>
+      <div className="notif-dd-head">
+        <span>Notificações</span>
+        <button type="button" className="notif-dd-gear" title="Ajustes de notificação"
+          onClick={() => { onClose(); onSettings(); }}>
+          <Settings size={15} />
+        </button>
+      </div>
+      <div className="notif-dd-body">
+        <Bell size={28} className="notif-dd-icon" />
+        <p>Nenhuma notificação no momento.</p>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function Topbar({ activeTab, badge, ownerInitials, profileName, session, onTab, onMenu, onNotifSettings, onSignOut, onEditAccount }) {
+  const [ddOpen, setDdOpen]       = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const acctRef  = useRef(null);
+  const bellRef  = useRef(null);
   const email = session?.user?.email || '';
 
   return (
@@ -596,10 +644,19 @@ function Topbar({ activeTab, badge, ownerInitials, profileName, session, onTab, 
         <NavButton icon={Settings} label="Ajustes" active={activeTab === 'ajustes'} onClick={() => onTab('ajustes')} />
       </nav>
       <div className="top-actions">
-        <button className="bell-button" type="button" onClick={onNotifications} aria-label="Notificações">
+        <button className="bell-button" type="button" ref={bellRef}
+          onClick={() => setNotifOpen((o) => !o)} aria-label="Notificações">
           <Bell size={24} />
           {badge > 0 && <span>{badge}</span>}
         </button>
+        {notifOpen && (
+          <NotifDropdown
+            badge={badge}
+            triggerRef={bellRef}
+            onClose={() => setNotifOpen(false)}
+            onSettings={() => { setNotifOpen(false); onNotifSettings(); }}
+          />
+        )}
         <button
           className="avatar-button"
           type="button"
@@ -1099,7 +1156,7 @@ const THEMES = [
   { id: 'purple', label: 'Roxo'        },
 ];
 
-function SettingsPage({ session, card, profileName, notifications, theme = 'ocean', onTheme, onSignOut, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete, onEditAccount }) {
+function SettingsPage({ session, card, profileName, notifications, theme = 'ocean', onTheme, onSignOut, onChangeCard, onSaveProfile, onNotifications, onSaveNotifications, onDelete, onEditAccount, focusNotif = 0 }) {
   const [draft, setDraft] = useState(card);
   const [profileDraft, setProfileDraft] = useState(profileName || '');
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -1214,7 +1271,7 @@ function SettingsPage({ session, card, profileName, notifications, theme = 'ocea
       </CollapsibleCard>
 
       {/* ── Notificações ── */}
-      <CollapsibleCard title="Notificações" subtitle="Gerencie os alertas que você deseja receber." defaultOpen={false}>
+      <CollapsibleCard key={`notif-${focusNotif}`} title="Notificações" subtitle="Gerencie os alertas que você deseja receber." defaultOpen={focusNotif > 0}>
         <NotificationPanel values={notifications} onChange={handleNotifChange} />
       </CollapsibleCard>
     </div>
