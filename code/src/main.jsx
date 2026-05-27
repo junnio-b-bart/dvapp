@@ -582,6 +582,68 @@ function App({ session }) {
     setHistoryModal(null);
   }
 
+  // Sobe um PDF/imagem para a fatura de um mês passado (roda o mesmo parser, mas
+  // usa o mês/ano histórico como contexto e grava na fatura já aberta no historyEdit).
+  async function processHistoryUpload(files, mode = 'replace') {
+    if (!files.length || !historyEdit) { setUploadError('Selecione um PDF ou imagens da fatura.'); return; }
+    setUploading(true); setUploadError(''); setUploadProgress('Preparando arquivos...');
+    try {
+      const pdfFiles = files.filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      const imageFiles = files.filter((f) => String(f.type || '').startsWith('image/'));
+      const monthIndex = historyEdit.month - 1;
+      const year = historyEdit.year;
+      const parsedGroups = [];
+
+      for (const file of pdfFiles) {
+        setUploadProgress(`Lendo PDF: ${file.name}`);
+        const parsedPdf = await parseInvoicePdfFile(file, monthIndex, year);
+        if (parsedPdf.items?.length) {
+          parsedGroups.push(parsedPdf);
+        } else {
+          setUploadProgress(`PDF sem texto. Tentando OCR: ${file.name}`);
+          parsedGroups.push(await parseInvoicePdfImagesWithOcr(file, monthIndex, year, (p) => {
+            setUploadProgress(`Lendo PDF com OCR... ${Math.round(p * 100)}%`);
+          }));
+        }
+      }
+      if (imageFiles.length) {
+        setUploadProgress('Lendo imagens com OCR...');
+        parsedGroups.push(await parseInvoiceImageFiles(imageFiles, monthIndex, year, (p) => {
+          setUploadProgress(`Lendo imagens com OCR... ${Math.round(p * 100)}%`);
+        }));
+      }
+
+      const parsedItems = parsedGroups.flatMap((g) => g.items || []);
+      const nextItems = sortInvoiceItems(parsedItems.map(normalizeParsedInvoiceItem).filter((r) => r.date && r.description && r.amount > 0));
+      if (!nextItems.length) throw new Error('Não encontrei lançamentos. Tente um PDF com texto selecionável ou fotos mais nítidas e bem iluminadas.');
+
+      setUploadProgress('Salvando no servidor...');
+      const invoiceId = historyEdit.invoiceId;
+      if (invoiceId) {
+        if (mode === 'append') {
+          const rows = nextItems.map((it) => ({
+            invoice_id: invoiceId, card_id: selectedCard.id, user_id: userId,
+            date: it.date, description: it.description,
+            installment: it.installment || '-', amount: Number(it.amount) || 0,
+            mine: Boolean(it.mine), manual: false,
+          }));
+          await db.insertItems(rows);
+        } else {
+          await db.replaceInvoiceItems(invoiceId, selectedCard.id, userId, nextItems);
+        }
+        for (const file of files) await db.uploadInvoiceFile(userId, selectedCard.id, file);
+        // Recarrega todos os itens da fatura histórica após o upload
+        const { data: dbItems } = await db.getItemsByInvoice(invoiceId);
+        if (dbItems?.length) setHistoryEdit((prev) => ({ ...prev, items: sortInvoiceItems(dbItems) }));
+      }
+      setHistoryModal(null);
+    } catch (error) {
+      setUploadError(error.message);
+    } finally {
+      setUploading(false); setUploadProgress('');
+    }
+  }
+
   if (appLoading) return <LoadingScreen />;
 
   // Avatar usa o nome do perfil; fallback para o titular do cartão selecionado
@@ -664,6 +726,7 @@ function App({ session }) {
                   onToggle={historyToggleMine}
                   onAdd={() => setHistoryModal('add-item')}
                   onEdit={(row) => setHistoryModal({ type: 'edit-item', row })}
+                  onUpload={() => { setUploadError(''); setHistoryModal('upload'); }}
                 />
               )}
               {state.activeTab === 'ajustes' && (
@@ -718,6 +781,17 @@ function App({ session }) {
       )}
       {historyModal?.type === 'edit-item' && (
         <ItemModal title="Editar item" card={selectedCard} row={historyModal.row} onClose={() => setHistoryModal(null)} onSave={historyUpsertItem} onDelete={historyRemoveItem} />
+      )}
+      {historyModal === 'upload' && historyEdit && (
+        <UploadModal
+          card={selectedCard}
+          uploading={uploading}
+          progress={uploadProgress}
+          error={uploadError}
+          referenceDateLabel={`${['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][historyEdit.month - 1]} / ${historyEdit.year}`}
+          onClose={() => { setHistoryModal(null); setUploadError(''); }}
+          onUpload={processHistoryUpload}
+        />
       )}
     </div>
   );
@@ -1226,7 +1300,7 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
 // ── Editor de fatura de mês passado ──────────────────────────────
 // Funciona igual à aba Faturas mas opera sobre uma fatura histórica.
 // Abre quando o usuário clica em "Ver fatura" no Histórico.
-function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit }) {
+function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit, onUpload }) {
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const { items, month, year, loading } = edit;
   const [search, setSearch] = useState('');
@@ -1288,6 +1362,8 @@ function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit }) {
             count={editTotals.mineCount}
             countSuffix={editTotals.allCount}
             label="itens selecionados"
+            uploadAction="Subir fatura"
+            onUpload={onUpload}
             action="Voltar ao Histórico"
             onAction={onBack}
           />
@@ -2389,7 +2465,7 @@ function ItemModal({ title, card, row, onClose, onSave, onDelete }) {
   );
 }
 
-function UploadModal({ card, uploading, progress, error, onClose, onUpload }) {
+function UploadModal({ card, uploading, progress, error, onClose, onUpload, referenceDateLabel }) {
   const [files, setFiles] = useState([]);
   const [mode, setMode] = useState('append');
   const fileLabel = files.length ? `${files.length} arquivo(s) selecionado(s)` : 'PDF, JPG, JPEG ou PNG';
@@ -2398,7 +2474,7 @@ function UploadModal({ card, uploading, progress, error, onClose, onUpload }) {
     <ModalShell title="Subir fatura" onClose={onClose}>
       <div className="upload-meta"><BankBadge bank={card.bank} />Cartão selecionado: {card.name} •••• {card.last4}</div>
       <div className="upload-meta"><CreditCard size={21} />Banco: {getBankName(card.bank)}</div>
-      <div className="upload-meta"><CalendarDays size={21} />Mês de referência: {getReferenceMonthLabel(closingDay)}</div>
+      <div className="upload-meta"><CalendarDays size={21} />Mês de referência: {referenceDateLabel || getReferenceMonthLabel(closingDay)}</div>
       <label className="drop-zone">
         <CloudUpload size={54} />
         <strong>Selecione um PDF ou fotos da fatura</strong>
