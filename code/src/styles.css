@@ -1116,3 +1116,65 @@
   color: var(--muted);
   line-height: 1.45;
 }
+
+/* ── Histórico: botões de ação no cabeçalho do detalhe ──────────── */
+.history-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── HistoryEditPage: cabeçalho com botão Voltar ────────────────── */
+.hist-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.hist-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.hist-edit-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.hist-edit-month {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+/* Badge "Fechada" inline — sem position:absolute */
+.hist-closed-badge {
+  display: inline-flex;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: #e4f8e9;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+@media(max-width:1120px) {
+  .hist-edit-header   { gap: 10px; margin-bottom: 14px; }
+  .hist-edit-month    { font-size: 18px; }
+  .hist-edit-title    { gap: 8px; }
+  .history-head-actions { gap: 6px; }
+  /* No mobile: "Exportar" fica escondido para não apertar o layout */
+  .history-head-actions .ghost:last-child { display: none; }
+}

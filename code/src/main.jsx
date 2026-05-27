@@ -214,6 +214,8 @@ function App({ session }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadProgress, setUploadProgress] = useState('');
+  const [historyEdit, setHistoryEdit] = useState(null);  // { invoiceId, items, month, year, loading }
+  const [historyModal, setHistoryModal] = useState(null);
 
   const selectedCard = state.cards.find((c) => c.id === state.selectedCardId) || state.cards[0];
   const currentItems = state.itemsByCard[selectedCard?.id] || [];
@@ -506,6 +508,80 @@ function App({ session }) {
     return (items || []).filter((r) => r.mine);
   }
 
+  // ── Edição de fatura histórica ──────────────────────────────────
+  // Abre o editor de fatura para o mês/ano passado.
+  // Para o período de faturamento atual, redireciona para a aba Faturas.
+  async function openHistoryInvoice(month, year) {
+    if (!selectedCard) return;
+    const { month: billingMonth, year: billingYear } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
+    if (month === billingMonth && year === billingYear) {
+      setTab('faturas');
+      return;
+    }
+    // Mostra loading imediato e carrega a fatura do banco
+    setHistoryEdit({ invoiceId: null, items: [], month, year, loading: true });
+    const { data: inv } = await db.getInvoiceByMonthYear(selectedCard.id, month, year);
+    let invoiceId;
+    if (inv) {
+      invoiceId = inv.id;
+    } else {
+      // Cria a fatura para o mês se ainda não existia (permite adicionar itens históricos)
+      const { data: created } = await db.getOrCreateInvoice(selectedCard.id, userId, month, year);
+      invoiceId = created?.id;
+      if (invoiceId) {
+        // Atualiza a lista de faturas do cartão com a nova fatura criada
+        const { data: newList } = await db.getInvoicesByCard(selectedCard.id);
+        setState((prev) => ({
+          ...prev,
+          invoicesListByCard: { ...prev.invoicesListByCard, [selectedCard.id]: newList || [] },
+        }));
+      }
+    }
+    if (!invoiceId) { setHistoryEdit(null); return; }
+    const { data: items } = await db.getItemsByInvoice(invoiceId);
+    setHistoryEdit({ invoiceId, items: sortInvoiceItems(items || []), month, year, loading: false });
+  }
+
+  function closeHistoryEdit() {
+    setHistoryEdit(null);
+    setHistoryModal(null);
+  }
+
+  async function historyToggleMine(id) {
+    if (!historyEdit) return;
+    const row = historyEdit.items.find((r) => r.id === id);
+    if (!row) return;
+    const next = !row.mine;
+    setHistoryEdit((prev) => ({ ...prev, items: prev.items.map((r) => r.id === id ? { ...r, mine: next } : r) }));
+    await db.updateItem(id, userId, { mine: next });
+  }
+
+  async function historyUpsertItem(next) {
+    if (!historyEdit) return;
+    const normalized = {
+      ...next,
+      amount: Number(String(next.amount).replace(/[^\d,.-]/g, '').replace(',', '.')) || 0,
+      installment: next.installment || '-',
+    };
+    const exists = historyEdit.items.some((row) => row.id === normalized.id);
+    if (exists) {
+      setHistoryEdit((prev) => ({ ...prev, items: prev.items.map((r) => r.id === normalized.id ? normalized : r) }));
+      await db.updateItem(normalized.id, userId, normalized);
+    } else {
+      const { data: saved } = await db.insertItem(historyEdit.invoiceId, selectedCard.id, userId, normalized);
+      const withId = saved ? { ...normalized, id: saved.id } : { ...normalized, id: `m-${Date.now()}` };
+      setHistoryEdit((prev) => ({ ...prev, items: sortInvoiceItems([withId, ...prev.items]) }));
+    }
+    setHistoryModal(null);
+  }
+
+  async function historyRemoveItem(id) {
+    if (!historyEdit) return;
+    setHistoryEdit((prev) => ({ ...prev, items: prev.items.filter((r) => r.id !== id) }));
+    await db.deleteItem(id, userId);
+    setHistoryModal(null);
+  }
+
   if (appLoading) return <LoadingScreen />;
 
   // Avatar usa o nome do perfil; fallback para o titular do cartão selecionado
@@ -568,7 +644,7 @@ function App({ session }) {
                   onSave={() => setTab('carteira')}
                 />
               )}
-              {state.activeTab === 'historico' && (
+              {state.activeTab === 'historico' && !historyEdit && (
                 <HistoryPage
                   key={selectedCard?.id}
                   items={myItems}
@@ -576,7 +652,18 @@ function App({ session }) {
                   invoices={state.invoicesListByCard[selectedCard?.id] || []}
                   closingDay={getCardClosingDay(selectedCard)}
                   onLoadMonthItems={loadHistoryMonth}
+                  onOpenInvoice={openHistoryInvoice}
                   onUpload={() => setModal('upload')}
+                />
+              )}
+              {state.activeTab === 'historico' && historyEdit && (
+                <HistoryEditPage
+                  edit={historyEdit}
+                  card={selectedCard}
+                  onBack={closeHistoryEdit}
+                  onToggle={historyToggleMine}
+                  onAdd={() => setHistoryModal('add-item')}
+                  onEdit={(row) => setHistoryModal({ type: 'edit-item', row })}
                 />
               )}
               {state.activeTab === 'ajustes' && (
@@ -623,6 +710,14 @@ function App({ session }) {
             await db.updateProfile(userId, { name });
           }}
         />
+      )}
+
+      {/* ── Modais do editor de fatura histórica ── */}
+      {historyModal === 'add-item' && (
+        <ItemModal title="Adicionar item manual" card={selectedCard} onClose={() => setHistoryModal(null)} onSave={historyUpsertItem} />
+      )}
+      {historyModal?.type === 'edit-item' && (
+        <ItemModal title="Editar item" card={selectedCard} row={historyModal.row} onClose={() => setHistoryModal(null)} onSave={historyUpsertItem} onDelete={historyRemoveItem} />
       )}
     </div>
   );
@@ -907,7 +1002,7 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
   );
 }
 
-function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onUpload }) {
+function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onOpenInvoice, onUpload }) {
   const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -926,6 +1021,7 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   const monthDiff = (selectedYear - billingYear) * 12 + (selectedMonthIndex - billingMonthIndex);
   const isBillingPeriod = monthDiff === 0;
   const isPast = monthDiff < 0;
+  const isFuture = monthDiff > 0;
 
   // Carrega itens do banco quando navega para um mês passado
   useEffect(() => {
@@ -1071,9 +1167,21 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
               <h2>{monthNamesFull[selectedMonthIndex]} / {selectedYear}</h2>
               <span className={`status-pill pill-${status}`}>{statusLabel}</span>
             </div>
-            <button className="ghost small" type="button">
-              <Download size={16} />Exportar PDF
-            </button>
+            <div className="history-head-actions">
+              {!isFuture && (
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => onOpenInvoice?.(selectedMonthIndex + 1, selectedYear)}
+                >
+                  <Pencil size={15} />
+                  {isBillingPeriod ? 'Ir para Faturas' : 'Ver fatura'}
+                </button>
+              )}
+              <button className="ghost small" type="button">
+                <Download size={16} />Exportar
+              </button>
+            </div>
           </div>
 
           <h3 className="history-items-title">Itens da minha fatura</h3>
@@ -1111,6 +1219,80 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
 
 
       </div>
+    </div>
+  );
+}
+
+// ── Editor de fatura de mês passado ──────────────────────────────
+// Funciona igual à aba Faturas mas opera sobre uma fatura histórica.
+// Abre quando o usuário clica em "Ver fatura" no Histórico.
+function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit }) {
+  const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const { items, month, year, loading } = edit;
+  const [search, setSearch] = useState('');
+
+  const visibleItems = useMemo(
+    () => items.filter((r) => r.description.toLowerCase().includes(search.toLowerCase())),
+    [items, search],
+  );
+
+  const editTotals = useMemo(() => ({
+    all: items.reduce((s, r) => s + Number(r.amount), 0),
+    mine: items.filter((r) => r.mine).reduce((s, r) => s + Number(r.amount), 0),
+    mineCount: items.filter((r) => r.mine).length,
+    allCount: items.length,
+  }), [items]);
+
+  return (
+    <div className="page-stack invoices-stack">
+
+      {/* ── Barra de voltar + título do mês ── */}
+      <div className="hist-edit-header">
+        <button className="ghost small hist-back-btn" type="button" onClick={onBack}>
+          <ChevronLeft size={18} />Histórico
+        </button>
+        <div className="hist-edit-title">
+          <h2 className="hist-edit-month">{monthNamesFull[month - 1]} / {year}</h2>
+          <span className="hist-closed-badge">Fechada</span>
+        </div>
+      </div>
+
+      {/* ── Métricas ── */}
+      <section className="metric-grid wallet-grid">
+        <Metric icon={FileText} title="Total da fatura" value={loading ? '…' : money(editTotals.all)} />
+        <Metric icon={UserRound} title="Minha parte" value={loading ? '…' : money(editTotals.mine)} />
+      </section>
+
+      {loading ? (
+        <div className="history-empty" style={{ marginTop: 32 }}>
+          <p>Carregando fatura…</p>
+        </div>
+      ) : (
+        <>
+          <div className="action-row no-upload">
+            <button className="primary add-item-btn" type="button" onClick={onAdd}>
+              <Plus size={19} />Adicionar item
+            </button>
+            <button className="ghost small filters-btn" type="button">
+              <Filter size={18} /><span className="filters-label">Filtros</span>
+            </button>
+            <label className="search-field">
+              <Search size={18} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar descrição" />
+            </label>
+          </div>
+          <SectionTitle title="Fatura completa" />
+          <CleanTable mode="invoice" items={visibleItems} onToggle={onToggle} onEdit={onEdit} />
+          <SummaryBar
+            icon={List}
+            count={editTotals.mineCount}
+            countSuffix={editTotals.allCount}
+            label="itens selecionados"
+            action="Voltar ao Histórico"
+            onAction={onBack}
+          />
+        </>
+      )}
     </div>
   );
 }
