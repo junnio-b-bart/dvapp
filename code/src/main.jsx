@@ -73,6 +73,25 @@ function getCurrentMonthYear() {
   return { month: now.getMonth() + 1, year: now.getFullYear() };
 }
 
+// Retorna o mês/ano da FATURA ABERTA considerando o dia de fechamento do cartão.
+// Se hoje >= closingDay, o cartão já fechou → novas compras vão para o próximo mês.
+function getInvoiceMonthYear(closingDay = 1) {
+  const now = new Date();
+  const today = now.getDate();
+  let month = now.getMonth() + 1;
+  let year = now.getFullYear();
+  if (closingDay > 0 && today >= closingDay) {
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return { month, year, monthIndex: month - 1 };
+}
+
+// Extrai o dia de fechamento numérico de um cartão (closeDate pode ser "15/05/2026" ou "15")
+function getCardClosingDay(card) {
+  return parseInt(String(card?.closeDate || card?.close_date || '1').split('/')[0]) || 1;
+}
+
 function item(id, date, description, installment, amount, mine, manual = false) {
   return { id, date, description, installment, amount, mine, manual };
 }
@@ -93,13 +112,13 @@ function getBankName(bankId) {
   return banks.find(([id]) => id === bankId)?.[1] || 'Nubank';
 }
 
-function getReferenceDateParts() {
-  const now = new Date();
-  return { monthIndex: now.getMonth(), year: now.getFullYear() };
+function getReferenceDateParts(closingDay = 0) {
+  const { monthIndex, year } = getInvoiceMonthYear(closingDay);
+  return { monthIndex, year };
 }
 
-function getReferenceMonthLabel() {
-  const { monthIndex, year } = getReferenceDateParts();
+function getReferenceMonthLabel(closingDay = 0) {
+  const { monthIndex, year } = getReferenceDateParts(closingDay);
   const month = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][monthIndex];
   return `${month}/${year}`;
 }
@@ -214,7 +233,7 @@ function App({ session }) {
 
       const normalized = cards.map(normalizeCard);
       const firstId = normalized[0].id;
-      const { month, year } = getCurrentMonthYear();
+      const { month, year } = getInvoiceMonthYear(getCardClosingDay(normalized[0]));
 
       const { data: inv } = await db.getOrCreateInvoice(firstId, userId, month, year);
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
@@ -259,7 +278,8 @@ function App({ session }) {
     update({ selectedCardId: id, drawerOpen: false, search: '' });
     // Lazy load: carrega os itens do cartão se ainda não foram carregados
     if (state.itemsByCard[id] === undefined) {
-      const { month, year } = getCurrentMonthYear();
+      const card = state.cards.find((c) => c.id === id);
+      const { month, year } = getInvoiceMonthYear(getCardClosingDay(card));
       const { data: inv } = await db.getOrCreateInvoice(id, userId, month, year);
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
       setState((prev) => ({
@@ -295,7 +315,7 @@ function App({ session }) {
     } else {
       let invoiceId = state.invoiceIdByCard[selectedCard.id];
       if (!invoiceId) {
-        const { month, year } = getCurrentMonthYear();
+        const { month, year } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
         const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, year);
         invoiceId = inv?.id;
         if (invoiceId) setState((prev) => ({ ...prev, invoiceIdByCard: { ...prev.invoiceIdByCard, [selectedCard.id]: invoiceId } }));
@@ -355,7 +375,7 @@ function App({ session }) {
     try {
       const pdfFiles = files.filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
       const imageFiles = files.filter((file) => String(file.type || '').startsWith('image/'));
-      const { monthIndex, year } = getReferenceDateParts();
+      const { monthIndex, year } = getReferenceDateParts(getCardClosingDay(selectedCard));
       const parsedGroups = [];
 
       for (const file of pdfFiles) {
@@ -383,7 +403,7 @@ function App({ session }) {
 
       // Salva no Supabase
       setUploadProgress('Salvando no servidor...');
-      const { month, year: yr } = getCurrentMonthYear();
+      const { month, year: yr } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
       let invoiceId = state.invoiceIdByCard[selectedCard.id];
       if (!invoiceId) {
         const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, yr);
@@ -2113,11 +2133,12 @@ function UploadModal({ card, uploading, progress, error, onClose, onUpload }) {
   const [files, setFiles] = useState([]);
   const [mode, setMode] = useState('append');
   const fileLabel = files.length ? `${files.length} arquivo(s) selecionado(s)` : 'PDF, JPG, JPEG ou PNG';
+  const closingDay = getCardClosingDay(card);
   return (
     <ModalShell title="Subir fatura" onClose={onClose}>
       <div className="upload-meta"><BankBadge bank={card.bank} />Cartão selecionado: {card.name} •••• {card.last4}</div>
       <div className="upload-meta"><CreditCard size={21} />Banco: {getBankName(card.bank)}</div>
-      <div className="upload-meta"><CalendarDays size={21} />Mês de referência: {getReferenceMonthLabel()}</div>
+      <div className="upload-meta"><CalendarDays size={21} />Mês de referência: {getReferenceMonthLabel(closingDay)}</div>
       <label className="drop-zone">
         <CloudUpload size={54} />
         <strong>Selecione um PDF ou fotos da fatura</strong>
