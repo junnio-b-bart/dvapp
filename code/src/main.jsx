@@ -233,9 +233,18 @@ function App({ session }) {
 
       const normalized = cards.map(normalizeCard);
       const firstId = normalized[0].id;
-      const { month, year } = getInvoiceMonthYear(getCardClosingDay(normalized[0]));
 
-      const { data: inv } = await db.getOrCreateInvoice(firstId, userId, month, year);
+      // Mostra a fatura mais recente que já existe; se não houver nenhuma,
+      // cria a do período de faturamento correto (considerando o fechamento).
+      const { data: existingInvoices } = await db.getInvoicesByCard(firstId);
+      let inv;
+      if (existingInvoices?.length) {
+        inv = existingInvoices[0]; // já ordenado por ano/mês desc
+      } else {
+        const { month, year } = getInvoiceMonthYear(getCardClosingDay(normalized[0]));
+        const { data: created } = await db.getOrCreateInvoice(firstId, userId, month, year);
+        inv = created;
+      }
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
       const [{ data: notifs }, { data: profile }] = await Promise.all([
         db.getNotificationSettings(userId),
@@ -279,8 +288,16 @@ function App({ session }) {
     // Lazy load: carrega os itens do cartão se ainda não foram carregados
     if (state.itemsByCard[id] === undefined) {
       const card = state.cards.find((c) => c.id === id);
-      const { month, year } = getInvoiceMonthYear(getCardClosingDay(card));
-      const { data: inv } = await db.getOrCreateInvoice(id, userId, month, year);
+      // Mostra a fatura mais recente existente; se não houver, cria a do período correto
+      const { data: existingInvoices } = await db.getInvoicesByCard(id);
+      let inv;
+      if (existingInvoices?.length) {
+        inv = existingInvoices[0];
+      } else {
+        const { month, year } = getInvoiceMonthYear(getCardClosingDay(card));
+        const { data: created } = await db.getOrCreateInvoice(id, userId, month, year);
+        inv = created;
+      }
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
       setState((prev) => ({
         ...prev,
@@ -313,17 +330,25 @@ function App({ session }) {
       updateCardItems(currentItems.map((row) => row.id === normalized.id ? normalized : row));
       await db.updateItem(normalized.id, userId, normalized);
     } else {
-      let invoiceId = state.invoiceIdByCard[selectedCard.id];
-      if (!invoiceId) {
-        const { month, year } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
-        const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, year);
-        invoiceId = inv?.id;
-        if (invoiceId) setState((prev) => ({ ...prev, invoiceIdByCard: { ...prev.invoiceIdByCard, [selectedCard.id]: invoiceId } }));
-      }
+      // Sempre recalcula o mês correto da fatura (ignora cache — pode ter mudado após fechamento)
+      const { month, year } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
+      const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, year);
+      const invoiceId = inv?.id;
+      const displayedInvoiceId = state.invoiceIdByCard[selectedCard.id];
       if (invoiceId) {
         const { data: saved } = await db.insertItem(invoiceId, selectedCard.id, userId, normalized);
         const withId = saved ? { ...normalized, id: saved.id } : { ...normalized, id: `m-${Date.now()}` };
-        updateCardItems([withId, ...currentItems]);
+        if (invoiceId !== displayedInvoiceId) {
+          // Novo item foi para uma fatura diferente da exibida → recarrega tudo e troca o display
+          const { data: allItems } = await db.getItemsByInvoice(invoiceId);
+          setState((prev) => ({
+            ...prev,
+            itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: sortInvoiceItems(allItems || [withId]) },
+            invoiceIdByCard: { ...prev.invoiceIdByCard, [selectedCard.id]: invoiceId },
+          }));
+        } else {
+          updateCardItems([withId, ...currentItems]);
+        }
       } else {
         updateCardItems([normalized, ...currentItems]);
       }
