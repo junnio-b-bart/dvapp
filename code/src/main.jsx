@@ -53,6 +53,24 @@ const banks = [
   ['inter', 'Banco Inter'],
 ];
 
+// Dado um valor armazenado ("DD/MM/AAAA", "DD/MM" ou apenas "DD"), retorna a
+// próxima ocorrência daquele dia a partir de hoje no formato DD/MM/AAAA.
+// Se hoje já passou do dia (ou é o próprio dia), avança para o mês seguinte.
+// Isso mantém closeDate / dueDate sempre no próximo vencimento real.
+function rollingCardDate(stored) {
+  if (!stored) return '';
+  const day = parseInt(String(stored).split('/')[0]) || 0;
+  if (!day || day > 31) return stored; // valor inválido → devolve sem alterar
+  const now = new Date();
+  let month = now.getMonth() + 1; // 1-based
+  let year  = now.getFullYear();
+  if (now.getDate() >= day) {     // dia já ocorreu este mês → próximo mês
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+}
+
 // Normaliza um card do formato Supabase (snake_case) para o formato do app (camelCase)
 function normalizeCard(card) {
   return {
@@ -62,8 +80,8 @@ function normalizeCard(card) {
     owner: card.owner || '',
     bank: card.bank || 'nubank',
     brand: card.brand || 'mastercard',
-    closeDate: card.close_date || '',
-    dueDate: card.due_date || '',
+    closeDate: rollingCardDate(card.close_date || card.closeDate || ''),
+    dueDate:   rollingCardDate(card.due_date   || card.dueDate   || ''),
     position: card.position || 0,
   };
 }
