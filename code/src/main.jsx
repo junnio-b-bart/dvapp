@@ -205,6 +205,7 @@ function App({ session }) {
     cards: [],
     itemsByCard: {},
     invoiceIdByCard: {},
+    invoicesListByCard: {},  // { [cardId]: Invoice[] } — lista de todas as faturas do cartão
     notifications: { closing: true, due: true, forecast: true, upload: true, overdue: true },
     profileName: '',   // nome do usuário no app (profiles.name)
     theme: localStorage.getItem('app-theme') || 'ocean',
@@ -257,6 +258,7 @@ function App({ session }) {
         selectedCardId: firstId,
         itemsByCard: { [firstId]: items || [] },
         invoiceIdByCard: inv ? { [firstId]: inv.id } : {},
+        invoicesListByCard: { [firstId]: existingInvoices || [] },
         profileName: profile?.name || '',
         notifications: notifs
           ? { closing: notifs.closing, due: notifs.due, forecast: notifs.forecast, upload: notifs.upload, overdue: notifs.overdue }
@@ -303,6 +305,7 @@ function App({ session }) {
         ...prev,
         itemsByCard: { ...prev.itemsByCard, [id]: items || [] },
         invoiceIdByCard: { ...prev.invoiceIdByCard, ...(inv ? { [id]: inv.id } : {}) },
+        invoicesListByCard: { ...prev.invoicesListByCard, [id]: existingInvoices || [] },
       }));
     }
   }
@@ -340,11 +343,15 @@ function App({ session }) {
         const withId = saved ? { ...normalized, id: saved.id } : { ...normalized, id: `m-${Date.now()}` };
         if (invoiceId !== displayedInvoiceId) {
           // Novo item foi para uma fatura diferente da exibida → recarrega tudo e troca o display
-          const { data: allItems } = await db.getItemsByInvoice(invoiceId);
+          const [{ data: allItems }, { data: newInvoicesList }] = await Promise.all([
+            db.getItemsByInvoice(invoiceId),
+            db.getInvoicesByCard(selectedCard.id),
+          ]);
           setState((prev) => ({
             ...prev,
             itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: sortInvoiceItems(allItems || [withId]) },
             invoiceIdByCard: { ...prev.invoiceIdByCard, [selectedCard.id]: invoiceId },
+            invoicesListByCard: { ...prev.invoicesListByCard, [selectedCard.id]: newInvoicesList || [] },
           }));
         } else {
           updateCardItems([withId, ...currentItems]);
@@ -490,6 +497,15 @@ function App({ session }) {
     setModal(null);
   }
 
+  // Carrega os itens "meus" de um mês/ano específico do banco — usado pelo Histórico
+  async function loadHistoryMonth(month, year) {
+    if (!selectedCard) return [];
+    const { data: inv } = await db.getInvoiceByMonthYear(selectedCard.id, month, year);
+    if (!inv) return [];
+    const { data: items } = await db.getItemsByInvoice(inv.id);
+    return (items || []).filter((r) => r.mine);
+  }
+
   if (appLoading) return <LoadingScreen />;
 
   // Avatar usa o nome do perfil; fallback para o titular do cartão selecionado
@@ -552,7 +568,17 @@ function App({ session }) {
                   onSave={() => setTab('carteira')}
                 />
               )}
-              {state.activeTab === 'historico' && <HistoryPage items={myItems} totals={totals} onUpload={() => setModal('upload')} />}
+              {state.activeTab === 'historico' && (
+                <HistoryPage
+                  key={selectedCard?.id}
+                  items={myItems}
+                  totals={totals}
+                  invoices={state.invoicesListByCard[selectedCard?.id] || []}
+                  closingDay={getCardClosingDay(selectedCard)}
+                  onLoadMonthItems={loadHistoryMonth}
+                  onUpload={() => setModal('upload')}
+                />
+              )}
               {state.activeTab === 'ajustes' && (
                 <SettingsPage
                   session={session}
@@ -881,32 +907,57 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
   );
 }
 
-function HistoryPage({ items, totals, onUpload }) {
+function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onUpload }) {
   const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  const { monthIndex: currentMonthIndex, year: currentYear } = getReferenceDateParts();
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState(currentMonthIndex);
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+
+  // Período de faturamento atual — ex.: junho/2026 quando o cartão fechou dia 15/mai
+  const { monthIndex: billingMonthIndex, year: billingYear } = getInvoiceMonthYear(closingDay);
+
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(billingMonthIndex);
+  const [selectedYear, setSelectedYear] = useState(billingYear);
   const [yearOpen, setYearOpen] = useState(false);
+  const [loadedItems, setLoadedItems] = useState(null);  // itens carregados do banco para meses passados
+  const [histLoading, setHistLoading] = useState(false);
   const stripRef = useRef(null);
   const stripFirstRender = useRef(true);
 
-  const monthDiff = (selectedYear - currentYear) * 12 + (selectedMonthIndex - currentMonthIndex);
-  const isCurrentMonth = monthDiff === 0;
+  // monthDiff relativo ao período de faturamento (0 = atual, <0 = passado, >0 = futuro)
+  const monthDiff = (selectedYear - billingYear) * 12 + (selectedMonthIndex - billingMonthIndex);
+  const isBillingPeriod = monthDiff === 0;
+  const isPast = monthDiff < 0;
+
+  // Carrega itens do banco quando navega para um mês passado
+  useEffect(() => {
+    if (!isPast) { setLoadedItems(null); return; }
+    setHistLoading(true);
+    setLoadedItems(null);
+    onLoadMonthItems(selectedMonthIndex + 1, selectedYear).then((loaded) => {
+      setLoadedItems(loaded || []);
+      setHistLoading(false);
+    });
+  }, [selectedMonthIndex, selectedYear]);
 
   const displayItems = useMemo(() => {
-    if (monthDiff === 0) return items;
-    if (monthDiff > 0) return getForecastItems(items, monthDiff);
-    return [];
-  }, [items, monthDiff]);
+    if (isBillingPeriod) return items;                        // período atual → itens já carregados
+    if (isPast) return loadedItems || [];                     // passado → carregados do banco
+    return getForecastItems(items, monthDiff);                // futuro → previsão de parcelas
+  }, [items, monthDiff, isBillingPeriod, isPast, loadedItems]);
 
-  const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + i.amount, 0), [displayItems]);
+  const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + Number(i.amount), 0), [displayItems]);
 
+  // Métricas: usa totals.mine para o período atual, soma dos itens carregados para passado/futuro
+  const displayMine = isBillingPeriod ? totals.mine : displayTotal;
+
+  // Status do chip do mês: baseado nas faturas reais no banco (campo invoices[])
   function getMonthStatus(index, year) {
-    const diff = (year - currentYear) * 12 + (index - currentMonthIndex);
-    if (diff < 0) return 'closed';
+    const diff = (year - billingYear) * 12 + (index - billingMonthIndex);
     if (diff === 0) return 'current';
-    return getForecastItems(items, diff).length > 0 ? 'forecast' : 'empty';
+    if (diff > 0) return getForecastItems(items, diff).length > 0 ? 'forecast' : 'empty';
+    // Passado: verifica se há fatura no banco para este mês/ano
+    const month = index + 1;
+    const hasInvoice = invoices.some((inv) => inv.month === month && inv.year === year);
+    return hasInvoice ? 'closed' : 'empty';
   }
 
   function navigate(direction) {
@@ -931,10 +982,8 @@ function HistoryPage({ items, totals, onUpload }) {
 
   const status = getMonthStatus(selectedMonthIndex, selectedYear);
   const statusLabel = { closed: 'Fechada', current: 'Atual', forecast: 'Previsão', empty: 'Sem dados' }[status];
-  const nextMonthIndex = (selectedMonthIndex + 1) % 12;
-  const nextMonthYear = selectedMonthIndex === 11 ? selectedYear + 1 : selectedYear;
-  const nextMonthForecast = getForecastItems(items, monthDiff + 1);
-  const isPastEmpty = monthDiff < 0 && displayItems.length === 0;
+  // Mês passado sem fatura no banco → mostra CTA de subir fatura
+  const isPastNoInvoice = isPast && !histLoading && status === 'empty';
 
   return (
     <div className="page-stack history-stack">
@@ -944,12 +993,12 @@ function HistoryPage({ items, totals, onUpload }) {
         <Metric
           icon={FileText}
           title="Minha parte"
-          value={monthDiff < 0 ? 'R$ 0,00' : money(isCurrentMonth ? totals.mine : displayTotal)}
+          value={histLoading ? '…' : (isPastNoInvoice ? 'R$ 0,00' : money(displayMine))}
         />
         <Metric
           icon={List}
           title="Lançamentos"
-          value={monthDiff < 0 ? '—' : String(displayItems.length)}
+          value={histLoading ? '…' : (isPastNoInvoice ? '—' : String(displayItems.length))}
         />
       </section>
 
@@ -973,7 +1022,7 @@ function HistoryPage({ items, totals, onUpload }) {
               </button>
               {yearOpen && (
                 <div className="year-dropdown">
-                  {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  {[billingYear - 2, billingYear - 1, billingYear, billingYear + 1].map((y) => (
                     <button
                       key={y}
                       className={y === selectedYear ? 'active' : ''}
@@ -1029,7 +1078,11 @@ function HistoryPage({ items, totals, onUpload }) {
 
           <h3 className="history-items-title">Itens da minha fatura</h3>
 
-          {isPastEmpty ? (
+          {histLoading ? (
+            <div className="history-empty">
+              <p>Carregando…</p>
+            </div>
+          ) : isPastNoInvoice ? (
             <div className="history-empty">
               <FileText size={28} />
               <p>Nenhuma fatura para este mês.</p>

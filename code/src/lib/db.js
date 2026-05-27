@@ -146,6 +146,17 @@ export async function getInvoicesByCard(cardId) {
     .order('month', { ascending: false });
 }
 
+// Busca uma fatura específica por mês/ano sem criar — usada pelo Histórico
+export async function getInvoiceByMonthYear(cardId, month, year) {
+  return supabase
+    .from('invoices')
+    .select('*')
+    .eq('card_id', cardId)
+    .eq('month', month)
+    .eq('year', year)
+    .maybeSingle();
+}
+
 export async function closeInvoice(invoiceId, userId) {
   return supabase
     .from('invoices')
