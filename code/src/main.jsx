@@ -1293,16 +1293,29 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   }, [selectedMonthIndex, selectedYear]);
 
   const displayItems = useMemo(() => {
-    if (isBillingPeriod) return items;                        // período atual → itens já carregados
-    if (isPast) return loadedItems || [];                     // passado → carregados do banco
-    // futuro → projeta parcelas de TODAS as faturas passadas + fatura atual
-    return getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
+    if (isPast) return loadedItems || [];   // passado → carregados do banco
+
+    // Período atual e meses futuros: projeta parcelas de faturas passadas
+    const projected = getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
+
+    if (!isBillingPeriod) return projected; // futuro → só projeções
+
+    // Período atual: mescla itens reais da fatura aberta + projeções,
+    // removendo projeções de itens que já constam na fatura real (evita duplicatas)
+    const dedupedProjected = projected.filter((proj) =>
+      !items.some(
+        (real) =>
+          real.description === proj.description &&
+          Math.abs(Number(real.amount) - Number(proj.amount)) < 0.01,
+      ),
+    );
+    return [...items, ...dedupedProjected];
   }, [items, monthDiff, isBillingPeriod, isPast, loadedItems, allInstallmentItems, selectedMonthIndex, selectedYear, closingDay]);
 
   const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + Number(i.amount), 0), [displayItems]);
 
-  // Métricas: usa totals.mine para o período atual, soma dos itens carregados para passado/futuro
-  const displayMine = isBillingPeriod ? totals.mine : displayTotal;
+  // Usa displayTotal sempre: inclui itens reais + projeções de parcelas em aberto
+  const displayMine = displayTotal;
 
   // Status do chip do mês: baseado nas faturas reais no banco (campo invoices[])
   function getMonthStatus(index, year) {
