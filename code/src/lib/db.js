@@ -183,6 +183,18 @@ export async function getItemsByCard(cardId) {
     .order('date', { ascending: true });
 }
 
+// Busca todos os itens "meus" com parcelas de TODAS as faturas do cartão.
+// Usado para projetar parcelas de faturas passadas nos meses futuros do Histórico.
+export async function getMineInstallmentItemsByCard(cardId) {
+  return supabase
+    .from('invoice_items')
+    .select('*')
+    .eq('card_id', cardId)
+    .eq('mine', true)
+    .neq('installment', '-')
+    .order('date', { ascending: true });
+}
+
 export async function insertItems(items) {
   // items é um array de objetos já mapeados para o formato do banco
   return supabase

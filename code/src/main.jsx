@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarDays,
   Check,
+  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -105,6 +106,26 @@ function getInvoiceMonthYear(closingDay = 1) {
   return { month, year, monthIndex: month - 1 };
 }
 
+// Retorna o mês/ano da FATURA de uma compra com base na sua data e no dia de fechamento.
+// Regra: se o dia da compra >= dia de fechamento → cai na fatura do mês seguinte.
+// Ex.: compra 03/05, fechamento 16 → fatura de maio (3 < 16).
+//      compra 20/05, fechamento 16 → fatura de junho (20 >= 16).
+// Se a data for inválida, cai na fatura atual (mesmo comportamento anterior).
+function getInvoiceMonthYearForDate(dateStr, closingDay = 1) {
+  const parts = String(dateStr || '').split('/').map(Number);
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n) || n === 0)) {
+    return getInvoiceMonthYear(closingDay); // fallback: fatura corrente
+  }
+  const [day, month, year] = parts;
+  let invMonth = month;
+  let invYear  = year;
+  if (day >= closingDay) {
+    invMonth += 1;
+    if (invMonth > 12) { invMonth = 1; invYear += 1; }
+  }
+  return { month: invMonth, year: invYear };
+}
+
 // Extrai o dia de fechamento numérico de um cartão (closeDate pode ser "15/05/2026" ou "15")
 function getCardClosingDay(card) {
   return parseInt(String(card?.closeDate || card?.close_date || '1').split('/')[0]) || 1;
@@ -202,6 +223,26 @@ function getForecastItems(items, monthDiff) {
   });
 }
 
+// Projeta parcelas de QUALQUER fatura passada para um mês/ano alvo.
+// allMineItems: todos os itens "meus" com parcelas de TODAS as faturas do cartão.
+// Calcula o offset entre o mês da fatura original do item e o mês alvo,
+// e retorna a parcela correspondente se ainda estiver dentro do total.
+function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closingDay) {
+  return allMineItems.flatMap((item) => {
+    if (!item.installment || item.installment === '-') return [];
+    const parts = item.installment.split('/');
+    if (parts.length !== 2) return [];
+    const current = parseInt(parts[0], 10);
+    const total = parseInt(parts[1], 10);
+    if (Number.isNaN(current) || Number.isNaN(total) || current >= total) return [];
+    const { month: invMonth, year: invYear } = getInvoiceMonthYearForDate(item.date, closingDay);
+    const offset = (targetYear - invYear) * 12 + (targetMonth - invMonth);
+    if (offset <= 0) return [];
+    const futureInstallment = current + offset;
+    if (futureInstallment > total) return [];
+    return [{ ...item, id: `forecast-${item.id}-${targetMonth}-${targetYear}`, installment: `${futureInstallment}/${total}` }];
+  });
+}
 
 function money(value) {
   return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -224,6 +265,7 @@ function App({ session }) {
     itemsByCard: {},
     invoiceIdByCard: {},
     invoicesListByCard: {},  // { [cardId]: Invoice[] } — lista de todas as faturas do cartão
+    allInstallmentItemsByCard: {},  // { [cardId]: Item[] } — itens meus c/ parcelas de TODAS as faturas
     notifications: { closing: true, due: true, forecast: true, upload: true, overdue: true },
     profileName: '',   // nome do usuário no app (profiles.name)
     theme: localStorage.getItem('app-theme') || 'ocean',
@@ -267,9 +309,10 @@ function App({ session }) {
         inv = created;
       }
       const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
-      const [{ data: notifs }, { data: profile }] = await Promise.all([
+      const [{ data: notifs }, { data: profile }, { data: installItems }] = await Promise.all([
         db.getNotificationSettings(userId),
         db.getProfile(userId),
+        db.getMineInstallmentItemsByCard(firstId),
       ]);
 
       setState((prev) => ({
@@ -279,6 +322,7 @@ function App({ session }) {
         itemsByCard: { [firstId]: items || [] },
         invoiceIdByCard: inv ? { [firstId]: inv.id } : {},
         invoicesListByCard: { [firstId]: existingInvoices || [] },
+        allInstallmentItemsByCard: { [firstId]: installItems || [] },
         profileName: profile?.name || '',
         notifications: notifs
           ? { closing: notifs.closing, due: notifs.due, forecast: notifs.forecast, upload: notifs.upload, overdue: notifs.overdue }
@@ -320,12 +364,16 @@ function App({ session }) {
         const { data: created } = await db.getOrCreateInvoice(id, userId, month, year);
         inv = created;
       }
-      const { data: items } = inv ? await db.getItemsByInvoice(inv.id) : { data: [] };
+      const [{ data: items }, { data: installItems }] = await Promise.all([
+        inv ? db.getItemsByInvoice(inv.id) : { data: [] },
+        db.getMineInstallmentItemsByCard(id),
+      ]);
       setState((prev) => ({
         ...prev,
         itemsByCard: { ...prev.itemsByCard, [id]: items || [] },
         invoiceIdByCard: { ...prev.invoiceIdByCard, ...(inv ? { [id]: inv.id } : {}) },
         invoicesListByCard: { ...prev.invoicesListByCard, [id]: existingInvoices || [] },
+        allInstallmentItemsByCard: { ...prev.allInstallmentItemsByCard, [id]: installItems || [] },
       }));
     }
   }
@@ -334,12 +382,24 @@ function App({ session }) {
     setState((prev) => ({ ...prev, itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: items } }));
   }
 
+  // Recarrega itens meus c/ parcelas do cartão — atualiza projeção de meses futuros no Histórico
+  async function reloadInstallmentItems(cardId) {
+    const { data } = await db.getMineInstallmentItemsByCard(cardId);
+    if (data) {
+      setState((prev) => ({
+        ...prev,
+        allInstallmentItemsByCard: { ...prev.allInstallmentItemsByCard, [cardId]: data },
+      }));
+    }
+  }
+
   async function toggleMine(id) {
     const row = currentItems.find((r) => r.id === id);
     if (!row) return;
     const next = !row.mine;
     updateCardItems(currentItems.map((r) => r.id === id ? { ...r, mine: next } : r));
     await db.updateItem(id, userId, { mine: next });
+    reloadInstallmentItems(selectedCard.id);
   }
 
   async function upsertItem(next) {
@@ -353,8 +413,9 @@ function App({ session }) {
       updateCardItems(currentItems.map((row) => row.id === normalized.id ? normalized : row));
       await db.updateItem(normalized.id, userId, normalized);
     } else {
-      // Sempre recalcula o mês correto da fatura (ignora cache — pode ter mudado após fechamento)
-      const { month, year } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
+      // Rota para a fatura correta com base na DATA DA COMPRA e no dia de fechamento.
+      // Ex.: compra 03/05 com fechamento dia 16 → fatura de maio, não de junho.
+      const { month, year } = getInvoiceMonthYearForDate(normalized.date, getCardClosingDay(selectedCard));
       const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, year);
       const invoiceId = inv?.id;
       const displayedInvoiceId = state.invoiceIdByCard[selectedCard.id];
@@ -380,13 +441,23 @@ function App({ session }) {
         updateCardItems([normalized, ...currentItems]);
       }
     }
+    reloadInstallmentItems(selectedCard.id);
     setModal(null);
   }
 
   async function removeItem(id) {
     updateCardItems(currentItems.filter((row) => row.id !== id));
     await db.deleteItem(id, userId);
+    reloadInstallmentItems(selectedCard.id);
     setModal(null);
+  }
+
+  async function bulkDeleteItems(ids, onDone) {
+    if (!ids.length) return;
+    updateCardItems(currentItems.filter((row) => !ids.includes(row.id)));
+    await Promise.all(ids.map((id) => db.deleteItem(id, userId)));
+    reloadInstallmentItems(selectedCard.id);
+    onDone?.();
   }
 
   async function addCard(card) {
@@ -497,6 +568,7 @@ function App({ session }) {
         itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: allItems },
         invoiceIdByCard: { ...prev.invoiceIdByCard, ...(invoiceId ? { [selectedCard.id]: invoiceId } : {}) },
       }));
+      reloadInstallmentItems(selectedCard.id);
       setModal(null);
     } catch (error) {
       setUploadError(error.message);
@@ -572,6 +644,7 @@ function App({ session }) {
     const next = !row.mine;
     setHistoryEdit((prev) => ({ ...prev, items: prev.items.map((r) => r.id === id ? { ...r, mine: next } : r) }));
     await db.updateItem(id, userId, { mine: next });
+    reloadInstallmentItems(selectedCard.id);
   }
 
   async function historyUpsertItem(next) {
@@ -590,6 +663,7 @@ function App({ session }) {
       const withId = saved ? { ...normalized, id: saved.id } : { ...normalized, id: `m-${Date.now()}` };
       setHistoryEdit((prev) => ({ ...prev, items: sortInvoiceItems([withId, ...prev.items]) }));
     }
+    reloadInstallmentItems(selectedCard.id);
     setHistoryModal(null);
   }
 
@@ -597,7 +671,16 @@ function App({ session }) {
     if (!historyEdit) return;
     setHistoryEdit((prev) => ({ ...prev, items: prev.items.filter((r) => r.id !== id) }));
     await db.deleteItem(id, userId);
+    reloadInstallmentItems(selectedCard.id);
     setHistoryModal(null);
+  }
+
+  async function historyBulkDeleteItems(ids, onDone) {
+    if (!ids.length || !historyEdit) return;
+    setHistoryEdit((prev) => ({ ...prev, items: prev.items.filter((r) => !ids.includes(r.id)) }));
+    await Promise.all(ids.map((id) => db.deleteItem(id, userId)));
+    reloadInstallmentItems(selectedCard.id);
+    onDone?.();
   }
 
   // Sobe um PDF/imagem para a fatura de um mês passado (roda o mesmo parser, mas
@@ -654,6 +737,7 @@ function App({ session }) {
         const { data: dbItems } = await db.getItemsByInvoice(invoiceId);
         if (dbItems?.length) setHistoryEdit((prev) => ({ ...prev, items: sortInvoiceItems(dbItems) }));
       }
+      reloadInstallmentItems(selectedCard.id);
       setHistoryModal(null);
     } catch (error) {
       setUploadError(error.message);
@@ -713,6 +797,7 @@ function App({ session }) {
               )}
               {state.activeTab === 'faturas' && (
                 <InvoicesPage
+                  key={selectedCard?.id}
                   items={visibleItems}
                   totals={totals}
                   search={state.search}
@@ -722,6 +807,7 @@ function App({ session }) {
                   onAdd={() => setModal('add-item')}
                   onEdit={(row) => setModal({ type: 'edit-item', row })}
                   onSave={() => setTab('carteira')}
+                  onBulkDelete={bulkDeleteItems}
                 />
               )}
               {state.activeTab === 'historico' && !historyEdit && (
@@ -734,6 +820,7 @@ function App({ session }) {
                   onLoadMonthItems={loadHistoryMonth}
                   onOpenInvoice={openHistoryInvoice}
                   onUpload={() => setModal('upload')}
+                  allInstallmentItems={state.allInstallmentItemsByCard[selectedCard?.id] || []}
                 />
               )}
               {state.activeTab === 'historico' && historyEdit && (
@@ -745,6 +832,7 @@ function App({ session }) {
                   onAdd={() => setHistoryModal('add-item')}
                   onEdit={(row) => setHistoryModal({ type: 'edit-item', row })}
                   onUpload={() => { setUploadError(''); setHistoryModal('upload'); }}
+                  onBulkDelete={historyBulkDeleteItems}
                 />
               )}
               {state.activeTab === 'ajustes' && (
@@ -1064,7 +1152,29 @@ function WalletPage({ card, items, totals, onView, onCloseInvoice }) {
   );
 }
 
-function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onAdd, onEdit, onSave }) {
+function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onAdd, onEdit, onSave, onBulkDelete }) {
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(null); // null | string[]
+
+  function toggleBulkSelect(id) {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handleBulkToggleAll(ids, select) {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  function exitBulk() { setBulkMode(false); setBulkSelected(new Set()); }
+
   return (
     <div className="page-stack invoices-stack">
       <section className="metric-grid wallet-grid">
@@ -1076,25 +1186,81 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
         <button className="ghost small filters-btn" type="button"><Filter size={18} /><span className="filters-label">Filtros</span></button>
         <label className="search-field"><Search size={18} /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar descrição" /></label>
       </div>
-      <SectionTitle title="Fatura completa" />
-      <CleanTable mode="invoice" items={items} onToggle={onToggle} onEdit={onEdit} />
-      <SummaryBar
-        icon={List}
-        count={totals.mineCount}
-        countSuffix={totals.allCount}
-        label="itens selecionados"
-        secondaryAction="Adicionar item"
-        onSecondary={onAdd}
-        action="Salvar alterações"
-        onAction={onSave}
-        uploadAction="Subir fatura"
-        onUpload={onUpload}
+
+      {/* ── Linha de seção com controles de seleção em massa ── */}
+      <div className="section-title-row">
+        <SectionTitle title="Fatura completa" />
+        {!bulkMode ? (
+          <button className="ghost small bulk-select-trigger" type="button" onClick={() => setBulkMode(true)}>
+            <CheckSquare size={16} />Selecionar
+          </button>
+        ) : (
+          <div className="bulk-row-controls">
+            <span className="bulk-count">{bulkSelected.size} selecionado{bulkSelected.size !== 1 ? 's' : ''}</span>
+            <button className="ghost small" type="button" onClick={exitBulk}><X size={16} />Cancelar</button>
+            {bulkSelected.size > 0 && (
+              <button className="danger-button small" type="button" onClick={() => setConfirmDelete([...bulkSelected])}>
+                <Trash2 size={16} />Excluir ({bulkSelected.size})
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <CleanTable
+        mode="invoice"
+        items={items}
+        onToggle={onToggle}
+        onEdit={onEdit}
+        bulkMode={bulkMode}
+        bulkSelected={bulkSelected}
+        onBulkToggle={toggleBulkSelect}
+        onBulkToggleAll={handleBulkToggleAll}
       />
+      {!bulkMode && (
+        <SummaryBar
+          icon={List}
+          count={totals.mineCount}
+          countSuffix={totals.allCount}
+          label="itens selecionados"
+          secondaryAction="Adicionar item"
+          onSecondary={onAdd}
+          action="Salvar alterações"
+          onAction={onSave}
+          uploadAction="Subir fatura"
+          onUpload={onUpload}
+        />
+      )}
+
+      {/* ── Confirmação de exclusão em massa ── */}
+      {confirmDelete && (
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
+          <section className="modal-card danger-modal">
+            <span className="sheet-handle" />
+            <button className="modal-close" type="button" onClick={() => setConfirmDelete(null)}><X size={25} /></button>
+            <span className="danger-icon"><CircleAlert size={36} /></span>
+            <h2>Excluir itens</h2>
+            <p className="centered-text">
+              Excluir <strong>{confirmDelete.length} {confirmDelete.length === 1 ? 'item' : 'itens'}</strong> da fatura?<br />
+              Esta ação não pode ser desfeita.
+            </p>
+            <div className="modal-actions">
+              <button className="ghost" type="button" onClick={() => setConfirmDelete(null)}>Cancelar</button>
+              <button className="danger-button" type="button" onClick={() => {
+                onBulkDelete(confirmDelete, exitBulk);
+                setConfirmDelete(null);
+              }}>
+                Excluir definitivamente
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
-function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onOpenInvoice, onUpload }) {
+function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onOpenInvoice, onUpload, allInstallmentItems = [] }) {
   const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -1129,8 +1295,9 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   const displayItems = useMemo(() => {
     if (isBillingPeriod) return items;                        // período atual → itens já carregados
     if (isPast) return loadedItems || [];                     // passado → carregados do banco
-    return getForecastItems(items, monthDiff);                // futuro → previsão de parcelas
-  }, [items, monthDiff, isBillingPeriod, isPast, loadedItems]);
+    // futuro → projeta parcelas de TODAS as faturas passadas + fatura atual
+    return getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
+  }, [items, monthDiff, isBillingPeriod, isPast, loadedItems, allInstallmentItems, selectedMonthIndex, selectedYear, closingDay]);
 
   const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + Number(i.amount), 0), [displayItems]);
 
@@ -1141,7 +1308,11 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   function getMonthStatus(index, year) {
     const diff = (year - billingYear) * 12 + (index - billingMonthIndex);
     if (diff === 0) return 'current';
-    if (diff > 0) return getForecastItems(items, diff).length > 0 ? 'forecast' : 'empty';
+    if (diff > 0) {
+      // Verifica parcelas de faturas passadas E da fatura atual projetadas para este mês
+      const hasForecast = getForecastItemsForMonth(allInstallmentItems, index + 1, year, closingDay).length > 0;
+      return hasForecast ? 'forecast' : 'empty';
+    }
     // Passado: verifica se há fatura no banco para este mês/ano
     const month = index + 1;
     const hasInvoice = invoices.some((inv) => inv.month === month && inv.year === year);
@@ -1318,10 +1489,13 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
 // ── Editor de fatura de mês passado ──────────────────────────────
 // Funciona igual à aba Faturas mas opera sobre uma fatura histórica.
 // Abre quando o usuário clica em "Ver fatura" no Histórico.
-function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit, onUpload }) {
+function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit, onUpload, onBulkDelete }) {
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const { items, month, year, loading } = edit;
   const [search, setSearch] = useState('');
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const visibleItems = useMemo(
     () => items.filter((r) => r.description.toLowerCase().includes(search.toLowerCase())),
@@ -1334,6 +1508,24 @@ function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit, onUpload
     mineCount: items.filter((r) => r.mine).length,
     allCount: items.length,
   }), [items]);
+
+  function toggleBulkSelect(id) {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handleBulkToggleAll(ids, select) {
+    setBulkSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  function exitBulk() { setBulkMode(false); setBulkSelected(new Set()); }
 
   return (
     <div className="page-stack invoices-stack">
@@ -1373,18 +1565,76 @@ function HistoryEditPage({ edit, card, onBack, onToggle, onAdd, onEdit, onUpload
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar descrição" />
             </label>
           </div>
-          <SectionTitle title="Fatura completa" />
-          <CleanTable mode="invoice" items={visibleItems} onToggle={onToggle} onEdit={onEdit} />
-          <SummaryBar
-            icon={List}
-            count={editTotals.mineCount}
-            countSuffix={editTotals.allCount}
-            label="itens selecionados"
-            uploadAction="Subir fatura"
-            onUpload={onUpload}
-            action="Voltar ao Histórico"
-            onAction={onBack}
+
+          {/* ── Linha de seção com controles de seleção em massa ── */}
+          <div className="section-title-row">
+            <SectionTitle title="Fatura completa" />
+            {!bulkMode ? (
+              <button className="ghost small bulk-select-trigger" type="button" onClick={() => setBulkMode(true)}>
+                <CheckSquare size={16} />Selecionar
+              </button>
+            ) : (
+              <div className="bulk-row-controls">
+                <span className="bulk-count">{bulkSelected.size} selecionado{bulkSelected.size !== 1 ? 's' : ''}</span>
+                <button className="ghost small" type="button" onClick={exitBulk}><X size={16} />Cancelar</button>
+                {bulkSelected.size > 0 && (
+                  <button className="danger-button small" type="button" onClick={() => setConfirmDelete([...bulkSelected])}>
+                    <Trash2 size={16} />Excluir ({bulkSelected.size})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <CleanTable
+            mode="invoice"
+            items={visibleItems}
+            onToggle={onToggle}
+            onEdit={onEdit}
+            bulkMode={bulkMode}
+            bulkSelected={bulkSelected}
+            onBulkToggle={toggleBulkSelect}
+            onBulkToggleAll={handleBulkToggleAll}
           />
+          {!bulkMode && (
+            <SummaryBar
+              icon={List}
+              count={editTotals.mineCount}
+              countSuffix={editTotals.allCount}
+              label="itens selecionados"
+              secondaryAction="Adicionar item"
+              onSecondary={onAdd}
+              uploadAction="Subir fatura"
+              onUpload={onUpload}
+              action="Voltar ao Histórico"
+              onAction={onBack}
+            />
+          )}
+
+          {/* ── Confirmação de exclusão em massa ── */}
+          {confirmDelete && (
+            <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
+              <section className="modal-card danger-modal">
+                <span className="sheet-handle" />
+                <button className="modal-close" type="button" onClick={() => setConfirmDelete(null)}><X size={25} /></button>
+                <span className="danger-icon"><CircleAlert size={36} /></span>
+                <h2>Excluir itens</h2>
+                <p className="centered-text">
+                  Excluir <strong>{confirmDelete.length} {confirmDelete.length === 1 ? 'item' : 'itens'}</strong> da fatura?<br />
+                  Esta ação não pode ser desfeita.
+                </p>
+                <div className="modal-actions">
+                  <button className="ghost" type="button" onClick={() => setConfirmDelete(null)}>Cancelar</button>
+                  <button className="danger-button" type="button" onClick={() => {
+                    onBulkDelete(confirmDelete, exitBulk);
+                    setConfirmDelete(null);
+                  }}>
+                    Excluir definitivamente
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -1715,10 +1965,8 @@ function SectionTitle({ title }) {
   return <h1 className="section-title">{title}</h1>;
 }
 
-function CleanTable({ items, mode, compact, onToggle, onEdit }) {
+function CleanTable({ items, mode, compact, onToggle, onEdit, bulkMode = false, bulkSelected, onBulkToggle, onBulkToggleAll }) {
   // ── Ordenação por coluna ───────────────────────────────────────
-  // sortKey: null | 'date' | 'description' | 'installment' | 'amount'
-  // sortDir: 'asc' | 'desc'
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('desc');
 
@@ -1731,7 +1979,6 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
     }
   }
 
-  // Indicador visual: ⇅ quando inativo, ▴/▾ quando ativo
   function SortIcon({ colKey }) {
     if (sortKey !== colKey) return <span className="sort-off">⇅</span>;
     return <span className="sort-on">{sortDir === 'asc' ? '▴' : '▾'}</span>;
@@ -1742,7 +1989,6 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
     return [...items].sort((a, b) => {
       let v = 0;
       if (sortKey === 'date') {
-        // Parseia "DD/MM/YYYY" ou "DD/MM" → número comparável
         const p = (s) => {
           const parts = (s || '').split('/');
           if (parts.length === 3) return +parts[2] * 10000 + +parts[1] * 100 + +parts[0];
@@ -1753,7 +1999,6 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
       } else if (sortKey === 'description') {
         v = (a.description || '').localeCompare(b.description || '', 'pt-BR', { sensitivity: 'base' });
       } else if (sortKey === 'installment') {
-        // Ordena pelo TOTAL de parcelas (número depois da "/")
         const p = (s) => {
           if (!s || s === '-') return 0;
           const parts = s.split('/');
@@ -1771,10 +2016,24 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
     });
   }, [items, sortKey, sortDir]);
 
+  // ── Suporte a seleção em massa ─────────────────────────────────
+  const allBulkSelected = bulkMode && sorted.length > 0 && sorted.every((r) => bulkSelected?.has(r.id));
+
+  function handleHeaderCheck() {
+    const ids = sorted.map((r) => r.id);
+    onBulkToggleAll?.(ids, !allBulkSelected);
+  }
+
   return (
     <section className={`table-card ${compact ? 'compact' : ''}`}>
       <div className={`table-header ${mode}`}>
-        {mode === 'invoice' && <span />}
+        {mode === 'invoice' && (
+          bulkMode
+            ? <button className="check-cell" type="button" title="Selecionar todos" onClick={handleHeaderCheck}>
+                {allBulkSelected && <Check size={15} />}
+              </button>
+            : <span />
+        )}
         <span className="sortable" onClick={() => handleSort('date', 'desc')}>
           Data <SortIcon colKey="date" />
         </span>
@@ -1787,7 +2046,7 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
         <span className="sortable" onClick={() => handleSort('amount', 'desc')}>
           Valor (R$) <SortIcon colKey="amount" />
         </span>
-        {mode === 'invoice' && <span>Ações</span>}
+        {mode === 'invoice' && <span>{bulkMode ? '' : 'Ações'}</span>}
       </div>
       {items.length === 0 && (
         <div className="table-empty">
@@ -1795,16 +2054,35 @@ function CleanTable({ items, mode, compact, onToggle, onEdit }) {
           <p>Nenhum item ainda. Suba uma fatura ou adicione manualmente.</p>
         </div>
       )}
-      {sorted.map((row) => (
-        <div className={`table-line ${mode} ${row.mine ? 'selected' : ''}`} key={row.id}>
-          {mode === 'invoice' && <button className="check-cell" type="button" onClick={() => onToggle(row.id)}>{row.mine && <Check size={15} />}</button>}
-          <span className="date-cell" data-short={(row.date || '').slice(0, 5)}>{row.date}</span>
-          <strong>{row.description}{row.manual && <em>Manual</em>}</strong>
-          <span>{row.installment}</span>
-          <b>{amountOnly(row.amount)}</b>
-          {mode === 'invoice' && <button className="edit-button" type="button" onClick={() => onEdit(row)} aria-label="Editar item"><Pencil size={18} /></button>}
-        </div>
-      ))}
+      {sorted.map((row) => {
+        const isBulkSelected = bulkSelected?.has(row.id);
+        const rowClass = bulkMode
+          ? `table-line ${mode}${isBulkSelected ? ' bulk-selected' : ''}`
+          : `table-line ${mode}${row.mine ? ' selected' : ''}`;
+        return (
+          <div className={rowClass} key={row.id}>
+            {mode === 'invoice' && (
+              bulkMode
+                ? <button className="check-cell" type="button" onClick={() => onBulkToggle?.(row.id)}>
+                    {isBulkSelected && <Check size={15} />}
+                  </button>
+                : <button className="check-cell" type="button" onClick={() => onToggle(row.id)}>
+                    {row.mine && <Check size={15} />}
+                  </button>
+            )}
+            <span className="date-cell" data-short={(row.date || '').slice(0, 5)}>{row.date}</span>
+            <strong>{row.description}{row.manual && <em>Manual</em>}</strong>
+            <span>{row.installment}</span>
+            <b>{amountOnly(row.amount)}</b>
+            {mode === 'invoice' && !bulkMode && (
+              <button className="edit-button" type="button" onClick={() => onEdit(row)} aria-label="Editar item">
+                <Pencil size={18} />
+              </button>
+            )}
+            {mode === 'invoice' && bulkMode && <span />}
+          </div>
+        );
+      })}
     </section>
   );
 }
