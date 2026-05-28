@@ -27,6 +27,9 @@ const IGNORED_KEYWORDS = [
   "DATA",
   "VALOR",
   "VOLTAR AO TOPO",
+  "PAGINA",   // "Pagina 1", "Pagina 2" — marcadores de página
+  "SUBTOTAL",
+  "TOTAL DA FATURA",
 ];
 
 const MONTH_TOKEN_TO_INDEX = {
@@ -244,6 +247,7 @@ function normalizeDescription(text) {
 function shouldIgnoreDescription(description) {
   const upper = normalizeToken(description);
   if (upper.length < 3) return true;
+  if (/^[\d.,\s]+$/.test(upper)) return true; // purely numeric like "145,53" or "1 2"
   return IGNORED_KEYWORDS.some((keyword) => upper.includes(keyword));
 }
 
@@ -352,7 +356,11 @@ export function extractInvoiceItemsFromLines(
     }
 
     const installmentInfo = parseInstallmentFromLine(normalized, dateInfo?.token);
-    const moneyMatches = [...normalized.matchAll(MONEY_RE)];
+    // Strip installment token before looking for money — prevents "01/12 103,75" → 12103.75
+    const lineForMoney = installmentInfo?.token
+      ? normalized.replace(installmentInfo.token, " ")
+      : normalized;
+    const moneyMatches = [...lineForMoney.matchAll(MONEY_RE)];
     const hasMoney = moneyMatches.length > 0;
 
     if (installmentInfo && !hasMoney && canAttachInstallment(candidate, lastItem)) {
@@ -394,11 +402,11 @@ export function extractInvoiceItemsFromLines(
     if (!purchaseDate) continue;
 
     let description = normalized;
-    if (dayInLine != null) {
-      description = description.replace(DAY_START_RE, " ");
-    }
+    // Strip full date token first (e.g. "16/03"); only fall back to day-only if no full token
     if (dateInfo?.token) {
       description = description.replace(dateInfo.token, " ");
+    } else if (dayInLine != null) {
+      description = description.replace(DAY_START_RE, " ");
     }
     description = description.replace(rawAmount, " ");
     if (installmentInfo?.token) {
