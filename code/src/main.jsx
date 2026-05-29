@@ -225,10 +225,14 @@ function getForecastItems(items, monthDiff) {
 
 // Projeta parcelas de QUALQUER fatura passada para um mês/ano alvo.
 // allMineItems: todos os itens "meus" com parcelas de TODAS as faturas do cartão.
-// Calcula o offset entre o mês da fatura original do item e o mês alvo,
-// e retorna a parcela correspondente se ainda estiver dentro do total.
-function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closingDay) {
+// currentInvoiceId: ID da fatura ATUAL (aberta). Itens importados de PDF dessa fatura
+//   NÃO projetam para meses futuros — eles já aparecem na fatura atual. Itens manuais
+//   da fatura atual SÃO projetados (o usuário os registrou explicitamente para rastrear).
+function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closingDay, currentInvoiceId = null) {
   return allMineItems.flatMap((item) => {
+    // Itens do PDF da fatura aberta não projetam — eles já estão visíveis na fatura atual.
+    // Faturas PASSADAS projetam normalmente (installments confirmados em faturas fechadas).
+    if (!item.manual && currentInvoiceId && item.invoice_id === currentInvoiceId) return [];
     if (!item.installment || item.installment === '-') return [];
     const parts = item.installment.split('/');
     if (parts.length !== 2) return [];
@@ -821,6 +825,7 @@ function App({ session }) {
                   onOpenInvoice={openHistoryInvoice}
                   onUpload={() => setModal('upload')}
                   allInstallmentItems={state.allInstallmentItemsByCard[selectedCard?.id] || []}
+                  currentInvoiceId={state.invoiceIdByCard[selectedCard?.id] || null}
                 />
               )}
               {state.activeTab === 'historico' && historyEdit && (
@@ -1260,7 +1265,7 @@ function InvoicesPage({ items, totals, search, onSearch, onToggle, onUpload, onA
   );
 }
 
-function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onOpenInvoice, onUpload, allInstallmentItems = [] }) {
+function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, onOpenInvoice, onUpload, allInstallmentItems = [], currentInvoiceId = null }) {
   const monthNamesShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const monthNamesFull = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -1295,12 +1300,13 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   const displayItems = useMemo(() => {
     if (isPast) return loadedItems || [];   // passado → carregados do banco
 
-    // Período atual e meses futuros: projeta parcelas de faturas passadas
-    const projected = getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
+    // Período atual e meses futuros: projeta parcelas de faturas PASSADAS
+    // (itens do PDF da fatura atual são filtrados por currentInvoiceId)
+    const projected = getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay, currentInvoiceId);
 
-    if (!isBillingPeriod) return projected; // futuro → só projeções
+    if (!isBillingPeriod) return projected; // futuro → só projeções de faturas anteriores
 
-    // Período atual: mescla itens reais da fatura aberta + projeções,
+    // Período atual: mescla itens reais da fatura aberta + projeções de faturas passadas,
     // removendo projeções de itens que já constam na fatura real (evita duplicatas)
     const dedupedProjected = projected.filter((proj) =>
       !items.some(
@@ -1310,7 +1316,7 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
       ),
     );
     return [...items, ...dedupedProjected];
-  }, [items, monthDiff, isBillingPeriod, isPast, loadedItems, allInstallmentItems, selectedMonthIndex, selectedYear, closingDay]);
+  }, [items, monthDiff, isBillingPeriod, isPast, loadedItems, allInstallmentItems, selectedMonthIndex, selectedYear, closingDay, currentInvoiceId]);
 
   const displayTotal = useMemo(() => displayItems.reduce((s, i) => s + Number(i.amount), 0), [displayItems]);
 
@@ -1322,8 +1328,8 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
     const diff = (year - billingYear) * 12 + (index - billingMonthIndex);
     if (diff === 0) return 'current';
     if (diff > 0) {
-      // Verifica parcelas de faturas passadas E da fatura atual projetadas para este mês
-      const hasForecast = getForecastItemsForMonth(allInstallmentItems, index + 1, year, closingDay).length > 0;
+      // Verifica parcelas de faturas PASSADAS projetadas para este mês
+      const hasForecast = getForecastItemsForMonth(allInstallmentItems, index + 1, year, closingDay, currentInvoiceId).length > 0;
       return hasForecast ? 'forecast' : 'empty';
     }
     // Passado: verifica se há fatura no banco para este mês/ano
