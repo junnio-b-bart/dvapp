@@ -306,7 +306,6 @@ function App({ session }) {
 
   const selectedCard = state.cards.find((c) => c.id === state.selectedCardId) || state.cards[0];
   const currentItems = state.itemsByCard[selectedCard?.id] || [];
-  const visibleItems = currentItems.filter((row) => row.description.toLowerCase().includes(state.search.toLowerCase()));
 
   // Parcelas de faturas PASSADAS que recaem no período de faturamento atual e são "minha".
   // Garante que a Carteira e Faturas mostrem continuidade de parcelados mesmo quando
@@ -325,17 +324,28 @@ function App({ session }) {
     );
   }, [selectedCard, state.allInstallmentItemsByCard, currentItems]);
 
-  const myItems = useMemo(
-    () => [...currentItems.filter((row) => row.mine), ...projectedMineItems],
+  // Lista completa de itens exibíveis: reais + projeções de parcelas passadas
+  const allDisplayItems = useMemo(
+    () => [...currentItems, ...projectedMineItems],
     [currentItems, projectedMineItems],
   );
 
+  const visibleItems = useMemo(
+    () => allDisplayItems.filter((row) => row.description.toLowerCase().includes(state.search.toLowerCase())),
+    [allDisplayItems, state.search],
+  );
+
+  const myItems = useMemo(
+    () => allDisplayItems.filter((row) => row.mine),
+    [allDisplayItems],
+  );
+
   const totals = useMemo(() => ({
-    all: currentItems.reduce((sum, row) => sum + Number(row.amount), 0),
+    all: allDisplayItems.reduce((sum, row) => sum + Number(row.amount), 0),
     mine: myItems.reduce((sum, row) => sum + Number(row.amount), 0),
     mineCount: myItems.length,
-    allCount: currentItems.length,
-  }), [currentItems, myItems]);
+    allCount: allDisplayItems.length,
+  }), [allDisplayItems, myItems]);
 
   // ── Carga inicial dos dados ───────────────────────────────────
   useEffect(() => {
