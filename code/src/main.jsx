@@ -156,6 +156,24 @@ function getReferenceDateParts(closingDay = 0) {
   return { monthIndex, year };
 }
 
+// Detecta o mês/ano da fatura com base nas datas dos itens parseados.
+// Para cada item, calcula a qual fatura pertenceria via getInvoiceMonthYearForDate,
+// e retorna o mês/ano mais frequente. Isso permite identificar automaticamente
+// se um PDF é de uma fatura passada (ex.: maio) mesmo que o período atual seja junho.
+function detectInvoiceMonth(items, closingDay) {
+  const counts = {};
+  for (const item of items) {
+    if (!item.date) continue;
+    const { month, year } = getInvoiceMonthYearForDate(item.date, closingDay);
+    const key = `${year}-${String(month).padStart(2, '0')}`;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return getInvoiceMonthYear(closingDay); // fallback: período atual
+  const [yearStr, monthStr] = entries[0][0].split('-');
+  return { month: Number(monthStr), year: Number(yearStr) };
+}
+
 function getReferenceMonthLabel(closingDay = 0) {
   const { monthIndex, year } = getReferenceDateParts(closingDay);
   const month = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][monthIndex];
@@ -526,8 +544,17 @@ function App({ session }) {
 
       // Salva no Supabase
       setUploadProgress('Salvando no servidor...');
-      const { month, year: yr } = getInvoiceMonthYear(getCardClosingDay(selectedCard));
-      let invoiceId = state.invoiceIdByCard[selectedCard.id];
+      const closingDay = getCardClosingDay(selectedCard);
+      const currentBilling = getInvoiceMonthYear(closingDay);
+
+      // Auto-detecta o mês/ano da fatura pelas datas dos itens parseados.
+      // Isso evita que um PDF de maio seja salvo na fatura de junho quando
+      // o período atual já é junho (dia de fechamento já passou).
+      const { month, year: yr } = detectInvoiceMonth(nextItems, closingDay);
+      const isCurrentPeriod = month === currentBilling.month && yr === currentBilling.year;
+
+      // Abre ou cria a fatura do mês detectado
+      let invoiceId = isCurrentPeriod ? state.invoiceIdByCard[selectedCard.id] : null;
       if (!invoiceId) {
         const { data: inv } = await db.getOrCreateInvoice(selectedCard.id, userId, month, yr);
         invoiceId = inv?.id;
@@ -554,20 +581,31 @@ function App({ session }) {
         for (const file of files) await db.uploadInvoiceFile(userId, selectedCard.id, file);
       }
 
-      // Recarrega todos os itens do banco para garantir que itens manuais
-      // (preservados pelo replaceInvoiceItems) também apareçam na tela.
+      // Recarrega todos os itens do banco para garantir consistência
       let allItems = nextItems;
       if (invoiceId) {
         const { data: dbItems } = await db.getItemsByInvoice(invoiceId);
         if (dbItems?.length) allItems = sortInvoiceItems(dbItems);
       }
 
-      setState((prev) => ({
-        ...prev,
-        activeTab: 'faturas',
-        itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: allItems },
-        invoiceIdByCard: { ...prev.invoiceIdByCard, ...(invoiceId ? { [selectedCard.id]: invoiceId } : {}) },
-      }));
+      if (isCurrentPeriod) {
+        // Fatura atual → exibe na aba Faturas como antes
+        setState((prev) => ({
+          ...prev,
+          activeTab: 'faturas',
+          itemsByCard: { ...prev.itemsByCard, [selectedCard.id]: allItems },
+          invoiceIdByCard: { ...prev.invoiceIdByCard, ...(invoiceId ? { [selectedCard.id]: invoiceId } : {}) },
+        }));
+      } else {
+        // Fatura PASSADA → recarrega a lista de faturas e abre o Histórico
+        // (não altera itemsByCard para não contaminar a fatura atual do cartão)
+        const { data: invoicesList } = await db.getInvoicesByCard(selectedCard.id);
+        setState((prev) => ({
+          ...prev,
+          activeTab: 'historico',
+          invoicesListByCard: { ...prev.invoicesListByCard, [selectedCard.id]: invoicesList || [] },
+        }));
+      }
       reloadInstallmentItems(selectedCard.id);
       setModal(null);
     } catch (error) {
