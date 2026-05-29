@@ -1340,7 +1340,14 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
   }, [selectedMonthIndex, selectedYear]);
 
   const displayItems = useMemo(() => {
-    if (isPast) return loadedItems || [];   // passado → carregados do banco
+    if (isPast) {
+      // Ainda carregando → aguarda
+      if (loadedItems === null) return [];
+      // Tem itens reais da fatura → mostra-os
+      if (loadedItems.length) return loadedItems;
+      // Mês passado SEM fatura carregada → projeta parcelas de faturas anteriores
+      return getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
+    }
 
     // Período atual e meses futuros: projeta parcelas de faturas anteriores
     const projected = getForecastItemsForMonth(allInstallmentItems, selectedMonthIndex + 1, selectedYear, closingDay);
@@ -1375,7 +1382,10 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
     // Passado: verifica se há fatura no banco para este mês/ano
     const month = index + 1;
     const hasInvoice = invoices.some((inv) => inv.month === month && inv.year === year);
-    return hasInvoice ? 'closed' : 'empty';
+    if (hasInvoice) return 'closed';
+    // Sem fatura → verifica se há projeções de parcelas de meses anteriores
+    const hasForecast = getForecastItemsForMonth(allInstallmentItems, index + 1, year, closingDay).length > 0;
+    return hasForecast ? 'forecast' : 'empty';
   }
 
   function navigate(direction) {
