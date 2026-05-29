@@ -307,7 +307,29 @@ function App({ session }) {
   const selectedCard = state.cards.find((c) => c.id === state.selectedCardId) || state.cards[0];
   const currentItems = state.itemsByCard[selectedCard?.id] || [];
   const visibleItems = currentItems.filter((row) => row.description.toLowerCase().includes(state.search.toLowerCase()));
-  const myItems = currentItems.filter((row) => row.mine);
+
+  // Parcelas de faturas PASSADAS que recaem no período de faturamento atual e são "minha".
+  // Garante que a Carteira e Faturas mostrem continuidade de parcelados mesmo quando
+  // a compra original está registrada em uma fatura de mês anterior.
+  const projectedMineItems = useMemo(() => {
+    const closingDay = getCardClosingDay(selectedCard);
+    const { month, year } = getInvoiceMonthYear(closingDay);
+    const allInstItems = state.allInstallmentItemsByCard[selectedCard?.id] || [];
+    const projected = getForecastItemsForMonth(allInstItems, month, year, closingDay);
+    return projected.filter(
+      (proj) => proj.mine &&
+        !currentItems.some(
+          (real) => real.description === proj.description &&
+            Math.abs(Number(real.amount) - Number(proj.amount)) < 0.01,
+        ),
+    );
+  }, [selectedCard, state.allInstallmentItemsByCard, currentItems]);
+
+  const myItems = useMemo(
+    () => [...currentItems.filter((row) => row.mine), ...projectedMineItems],
+    [currentItems, projectedMineItems],
+  );
+
   const totals = useMemo(() => ({
     all: currentItems.reduce((sum, row) => sum + Number(row.amount), 0),
     mine: myItems.reduce((sum, row) => sum + Number(row.amount), 0),
