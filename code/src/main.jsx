@@ -112,7 +112,16 @@ function getInvoiceMonthYear(closingDay = 1) {
 //      compra 20/05, fechamento 16 → fatura de junho (20 >= 16).
 // Se a data for inválida, cai na fatura atual (mesmo comportamento anterior).
 function getInvoiceMonthYearForDate(dateStr, closingDay = 1) {
-  const parts = String(dateStr || '').split('/').map(Number);
+  const str = String(dateStr || '');
+  let parts;
+  if (str.includes('/')) {
+    parts = str.split('/').map(Number); // DD/MM/YYYY
+  } else if (str.includes('-')) {
+    const iso = str.split('-').map(Number); // YYYY-MM-DD
+    parts = [iso[2], iso[1], iso[0]]; // reordena para [day, month, year]
+  } else {
+    parts = [];
+  }
   if (parts.length < 3 || parts.some((n) => Number.isNaN(n) || n === 0)) {
     return getInvoiceMonthYear(closingDay); // fallback: fatura corrente
   }
