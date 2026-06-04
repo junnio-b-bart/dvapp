@@ -184,11 +184,13 @@ export async function getItemsByCard(cardId) {
 }
 
 // Busca todos os itens "meus" com parcelas de TODAS as faturas do cartão.
-// Usado para projetar parcelas de faturas passadas nos meses futuros do Histórico.
+// Inclui month/year da fatura para que getForecastItemsForMonth use o mês correto
+// como ponto de referência (e não a data de compra original, que quebra para
+// itens em parcelas intermediárias como "10/12").
 export async function getMineInstallmentItemsByCard(cardId) {
   return supabase
     .from('invoice_items')
-    .select('*')
+    .select('*, invoice:invoices!invoice_id(month, year)')
     .eq('card_id', cardId)
     .eq('mine', true)
     .neq('installment', '-')

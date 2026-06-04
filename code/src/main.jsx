@@ -252,8 +252,9 @@ function getForecastItems(items, monthDiff) {
 
 // Projeta parcelas de QUALQUER fatura para um mês/ano alvo.
 // allMineItems: todos os itens "meus" com parcelas de TODAS as faturas do cartão.
-// Calcula o offset entre o mês da fatura original do item e o mês alvo,
-// e retorna a parcela correspondente se ainda estiver dentro do total.
+// Usa o mês/ano DA FATURA onde o item está registrado (item.invoice) como ponto de
+// referência — não a data de compra original. Isso garante que itens em parcelas
+// intermediárias (ex: "10/12" já em Maio) projetem corretamente para os meses seguintes.
 function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closingDay) {
   return allMineItems.flatMap((item) => {
     if (!item.installment || item.installment === '-') return [];
@@ -262,7 +263,11 @@ function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closing
     const current = parseInt(parts[0], 10);
     const total = parseInt(parts[1], 10);
     if (Number.isNaN(current) || Number.isNaN(total) || current >= total) return [];
-    const { month: invMonth, year: invYear } = getInvoiceMonthYearForDate(item.date, closingDay);
+
+    // Prefere o mês/ano da fatura (vem do join no DB); cai no derivado pela data se ausente
+    const invMonth = item.invoice?.month ?? getInvoiceMonthYearForDate(item.date, closingDay).month;
+    const invYear  = item.invoice?.year  ?? getInvoiceMonthYearForDate(item.date, closingDay).year;
+
     const offset = (targetYear - invYear) * 12 + (targetMonth - invMonth);
     if (offset <= 0) return [];
     const futureInstallment = current + offset;
