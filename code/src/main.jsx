@@ -453,11 +453,17 @@ function App({ session }) {
   }
 
   async function toggleMine(id) {
-    const row = currentItems.find((r) => r.id === id);
+    // Itens projetados têm ID virtual "forecast-{originalId}-{mes}-{ano}".
+    // O toggle deve atualizar o item ORIGINAL no banco, não o virtual.
+    const isForecast = id.startsWith('forecast-');
+    const dbId = isForecast ? (id.match(/^forecast-(.+)-\d+-\d{4}$/)?.[1] ?? id) : id;
+    const row = currentItems.find((r) => r.id === id) ?? projectedMineItems.find((r) => r.id === id);
     if (!row) return;
     const next = !row.mine;
-    updateCardItems(currentItems.map((r) => r.id === id ? { ...r, mine: next } : r));
-    await db.updateItem(id, userId, { mine: next });
+    if (!isForecast) {
+      updateCardItems(currentItems.map((r) => r.id === id ? { ...r, mine: next } : r));
+    }
+    await db.updateItem(dbId, userId, { mine: next });
     reloadInstallmentItems(selectedCard.id);
   }
 
@@ -721,8 +727,12 @@ function App({ session }) {
     const row = historyEdit.items.find((r) => r.id === id);
     if (!row) return;
     const next = !row.mine;
+    // Para itens projetados, o DB id real está embutido no ID virtual
+    const dbId = id.startsWith('forecast-')
+      ? (id.match(/^forecast-(.+)-\d+-\d{4}$/)?.[1] ?? id)
+      : id;
     setHistoryEdit((prev) => ({ ...prev, items: prev.items.map((r) => r.id === id ? { ...r, mine: next } : r) }));
-    await db.updateItem(id, userId, { mine: next });
+    await db.updateItem(dbId, userId, { mine: next });
     reloadInstallmentItems(selectedCard.id);
   }
 
