@@ -276,6 +276,25 @@ function getForecastItemsForMonth(allMineItems, targetMonth, targetYear, closing
   });
 }
 
+// Total de parcelas de "8/10" → 10; "-" ou inválido → null
+function installmentTotal(installment) {
+  const parts = String(installment || '').split('/');
+  if (parts.length !== 2) return null;
+  const total = parseInt(parts[1], 10);
+  return Number.isNaN(total) ? null : total;
+}
+
+// Uma projeção é redundante quando a fatura real já contém a MESMA compra:
+// mesma descrição e (mesmo valor OU mesma série de parcelas). Evita que parcelas
+// cujo valor muda mês a mês (ex.: encargos/juros/rotativo) apareçam duplicadas.
+function isRealDuplicateOfProjection(real, proj) {
+  if (real.description !== proj.description) return false;
+  if (Math.abs(Number(real.amount) - Number(proj.amount)) < 0.01) return true;
+  const realTotal = installmentTotal(real.installment);
+  const projTotal = installmentTotal(proj.installment);
+  return realTotal != null && projTotal != null && realTotal === projTotal;
+}
+
 function money(value) {
   return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -322,10 +341,7 @@ function App({ session }) {
     const projected = getForecastItemsForMonth(allInstItems, month, year, closingDay);
     return projected.filter(
       (proj) => proj.mine &&
-        !currentItems.some(
-          (real) => real.description === proj.description &&
-            Math.abs(Number(real.amount) - Number(proj.amount)) < 0.01,
-        ),
+        !currentItems.some((real) => isRealDuplicateOfProjection(real, proj)),
     );
   }, [selectedCard, state.allInstallmentItemsByCard, currentItems]);
 
@@ -1404,11 +1420,7 @@ function HistoryPage({ items, totals, invoices, closingDay, onLoadMonthItems, on
     // Período atual: mescla itens reais da fatura aberta + projeções,
     // removendo projeções de itens que já constam na fatura real (evita duplicatas)
     const dedupedProjected = projected.filter((proj) =>
-      !items.some(
-        (real) =>
-          real.description === proj.description &&
-          Math.abs(Number(real.amount) - Number(proj.amount)) < 0.01,
-      ),
+      !items.some((real) => isRealDuplicateOfProjection(real, proj)),
     );
     return [...items, ...dedupedProjected];
   }, [items, monthDiff, isBillingPeriod, isPast, loadedItems, allInstallmentItems, selectedMonthIndex, selectedYear, closingDay]);
